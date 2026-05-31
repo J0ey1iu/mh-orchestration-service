@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+from typing import Any, Protocol, runtime_checkable
+
+
+@runtime_checkable
+class M2MAuthProvider(Protocol):
+    """机机接口鉴权提供者。
+
+    在 agent 调用端点（``POST /api/v1/agents/{name}/run``）和
+    runtime tool 端点（``POST /api/v1/tools/*/execute``）被调用时
+    验证调用方身份。
+
+    客户企业部署时实现此 protocol，通过 SOA 或其他机制验证调用方
+    应用身份。接收原始 ``Request`` 对象，可自行决定检查方式（header、
+    cookie、mTLS 证书等）。
+
+    返回 ``app_id`` 表示鉴权通过（拥有所有权限），返回 ``None`` 表示失败。
+    """
+
+    async def authenticate(self, request: Any) -> str | None:
+        """验证机机调用方身份。
+
+        Args:
+            request: 当前 FastAPI Request 对象。
+
+        Returns:
+            app_id 表示鉴权通过，``None`` 表示鉴权失败（调用方返回 401）。
+        """
+        ...
+
+    async def get_identity_headers(self, request: Any, identity: str) -> dict[str, str]:
+        """返回注入到出站 binding（RemoteAgentBinding / RemoteToolBinding）的身份 header。
+
+        当 chat 流程或 agent 调用下游 remote agent / tool 时，此方法返回的 header
+        会被写入 HTTP 请求，让下游 M2M 鉴权端点识别调用方身份。
+
+        Args:
+            request: 当前 FastAPI Request 对象。
+            identity: 调用方身份标识（user_id 或 app_id）。
+
+        Returns:
+            Header 键值对字典，会写入出站 binding 的 ``headers`` 字段。
+            默认返回 ``{"X-User-Id": identity}``。
+        """
+        ...
+
+    async def close(self) -> None:
+        """释放资源。"""
+        ...
+
+
+class _DefaultM2MAuthProvider:
+    """默认实现——仅信任内部 loopback 调用。
+
+    仅识别 ``X-User-Id`` header，这是 chat 流程内部 tool 调用时
+    ``create_runtime()`` 自动携带的用户上下文标识。不作为鉴权依据，
+    仅用于开发/演示环境方便内部 loopback。
+
+    生产环境必须替换为实际的 M2M 鉴权实现（如 SOA），并在实现中
+    **忽略** ``X-User-Id`` header。
+    """
+
+    async def close(self) -> None:
+        pass
+
+    async def authenticate(self, request: Any) -> str | None:
+        x_user_id = request.headers.get("X-User-Id")
+        if x_user_id:
+            return x_user_id
+        return None
+
+    async def get_identity_headers(self, request: Any, identity: str) -> dict[str, str]:
+        """返回 ``{"X-User-Id": identity}``。"""
+        return {"X-User-Id": identity}

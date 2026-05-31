@@ -1,0 +1,320 @@
+# orchestration-service Developer Guide (for Coding Agent)
+
+This document specifies the exact implementation contract for building a custom gateway service using the `orchestration-service` framework. Follow these instructions precisely.
+
+---
+
+## 1. Entry Point
+
+The entire service is assembled by calling `create_app()` (import: `from mh_orchestration_service import create_app`). Your code lives in a single Python file (e.g. `my_app.py`) that uvicorn loads.
+
+```python
+import asyncio
+from mh_orchestration_service import ConfigManager, ConfigSchema, create_app
+
+config_mgr = ConfigManager()
+settings = asyncio.run(config_mgr.resolve(ConfigSchema, prefix="ORCH"))
+app = create_app(settings=settings)
+```
+
+---
+
+## 2. Adapter Protocol Contracts
+
+### 2.1 UserAuthProvider (`from minimal_harness.auth import UserAuthProvider`)
+
+```python
+@runtime_checkable
+class UserAuthProvider(Protocol):
+    async def verify(self, request: Any) -> UserIdentity | None: ...
+```
+
+- Input: raw FastAPI `Request` object
+- Output: `UserIdentity` (dataclass with `user_id`, `username`, `roles`, `extra_data`) or `None`
+- Read from `request.headers`, `request.cookies`, or call external auth API
+- `user_id` is REQUIRED — used for permission checks and session ownership
+
+### 2.2 PermissionChecker (`from minimal_harness.auth import PermissionChecker`)
+
+```python
+@runtime_checkable
+class PermissionChecker(Protocol):
+    async def get_permissions(self, user_id: str) -> list[str]: ...
+    async def check(self, user_id: str, permission: str) -> bool: ...
+```
+
+- Permission format: `action:resource:target` (e.g. `"use:agent:code-reviewer"`)
+- Wildcard `*` supported at any segment
+- Use `match_permission()` from `minimal_harness.auth.protocols` for wildcard evaluation
+
+### 2.3 RegistryProvider (`from minimal_harness.adapters import RegistryProvider`)
+
+```python
+@runtime_checkable
+class RegistryProvider(Protocol):
+    async def get_agent(self, name: str) -> dict[str, Any] | None: ...
+    async def list_agents(self) -> list[dict[str, Any]]: ...
+    async def get_tool(self, name: str) -> dict[str, Any] | None: ...
+    async def list_tools(self) -> list[dict[str, Any]]: ...
+    async def get_scenario(self, scenario_id: str) -> dict[str, Any] | None: ...
+    async def list_scenarios(self) -> list[dict]: ...
+```
+
+**Agent dict shape:**
+```json
+{
+  "name": "agent-id",
+  "display_name": "Human Name",
+  "display_name_locale": "{\"zh\":\"中文名\",\"en\":\"English\"}",
+  "description": "What this agent does",
+  "description_locale": "{\"zh\":\"...\",\"en\":\"...\"}",
+  "system_prompt": "You are an agent that...",
+  "system_prompt_locale": "{\"zh\":\"你是一个...\",\"en\":\"You are...\"}",
+  "endpoint_url": "http://other-service/agent/run"  // omit or empty for local execution
+}
+```
+
+**Tool dict shape:**
+```json
+{
+  "name": "tool-id",
+  "display_name": "Human Name",
+  "display_name_locale": "{\"zh\":\"...\",\"en\":\"...\"}",
+  "description": "What this tool does",
+  "description_locale": "{\"zh\":\"...\",\"en\":\"...\"}",
+  "parameters": {"type": "object", "properties": {...}, "required": [...]},
+  "endpoint_url": "http://other-service/tool/execute",  // omit for local + _fn
+  "_fn": async_callable  // only for local execution
+}
+```
+
+**Scenario dict shape:**
+```json
+{
+  "id": "scenario-id",
+  "name": "Scenario Name",
+  "name_locale": "{\"zh\":\"...\",\"en\":\"...\"}",
+  "icon": "💻",
+  "description": "What this scenario does",
+  "description_locale": "{\"zh\":\"...\",\"en\":\"...\"}",
+  "agents": [{"name": "agent-id", "tool_names": ["tool-a", "tool-b"]}]
+}
+```
+
+`display_name_locale`, `description_locale`, `system_prompt_locale` are JSON-encoded strings (not dicts) for backward compatibility.
+
+### 2.4 OutboundAuthProvider (`from mh_orchestration_service import OutboundAuthProvider`)
+
+```python
+@runtime_checkable
+class OutboundAuthProvider(Protocol):
+    async def get_headers(self, request: Any, target_url: str, target_type: str) -> dict[str, str]: ...
+```
+
+- Called when orchestration makes outbound HTTP calls to remote agent/tool endpoints
+- Default: forwards all request headers except hop-by-hop headers
+- Implement to inject service-mesh auth (HMAC, mTLS, etc.)
+
+### 2.5 M2MAuthProvider (`from mh_orchestration_service import M2MAuthProvider`)
+
+```python
+@runtime_checkable
+class M2MAuthProvider(Protocol):
+    async def authenticate(self, request: Any) -> str | None: ...
+    async def get_identity_headers(self, request: Any, identity: str) -> dict[str, str]: ...
+    async def close(self) -> None: ...
+```
+
+- Protects `POST /api/v1/agents/{name}/run` and `POST /api/v1/tools/*/execute`
+- Returns `app_id` (str) on success, `None` for 401
+- Default: trusts `X-User-Id` header (development only — MUST replace in production)
+
+### 2.6 ConfigProvider (`from mh_orchestration_service import ConfigProvider`)
+
+```python
+@runtime_checkable
+class ConfigProvider(Protocol):
+    async def get(self, key: str) -> str | None: ...
+```
+
+- Covers both normal config (Apollo/Nacos) and secrets (Vault/AWS Secrets Manager)
+- `SecretResolver` is a backward-compatible alias; `from mh_orchestration_service import SecretResolver` still works
+- `ConfigManager` accepts two `ConfigProvider` instances — `config_provider` and `secret_resolver` — differentiated by the `sensitive_fields` parameter
+
+---
+
+## 3. Adapter Injection via LifespanHook
+
+Every adapter is injected as a `LifespanHook` (`Callable[[FastAPI], AbstractAsyncContextManager[None]]`):
+
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+
+@asynccontextmanager
+async def my_hook(app: FastAPI):
+    # on startup
+    app.state.adapters.registry_provider = MyRegistry()
+    yield
+    # on shutdown — close resources
+    await app.state.adapters.registry_provider.close()
+```
+
+Pass named hooks to `create_app()`:
+
+```python
+app = create_app(
+    settings=settings,
+    token_verifier=my_token_verifier_hook,
+    permission_checker=my_permission_checker_hook,
+    registry_provider=my_registry_provider_hook,
+    outbound_auth_provider=my_outbound_auth_hook,
+    m2m_auth_provider=my_m2m_auth_hook,
+    llm_provider_factory=my_llm_factory_hook,
+    lifespan_hooks=[my_cross_cutting_hook],  # generic hooks run last
+    logger=my_logger,
+)
+```
+
+**Execution order within lifespan:**
+1. `AppState` created with `settings`
+2. Built-in defaults filled for any `None` adapter
+3. Named hooks run (in parameter order)
+4. `lifespan_hooks` run
+5. Database initialized
+6. Server serves requests
+7. On shutdown: hooks unwind in reverse order, then built-in adapters close
+
+---
+
+## 4. Configuration System
+
+### 4.1 ConfigManager (`from mh_orchestration_service import ConfigManager`)
+
+```python
+class ConfigManager:
+    def __init__(self, config_provider: ConfigProvider | None = None, secret_resolver: ConfigProvider | None = None): ...
+    async def resolve(self, schema_cls: type[T], *, prefix: str = "ORCH",
+                      sensitive_fields: set[str] | None = None,
+                      key_mapping: dict[str, str] | None = None) -> T: ...
+```
+
+**Resolution order per field:**
+1. Env var `{PREFIX}_{FIELD}` (e.g. `ORCH_TOKEN_SECRET_KEY`) — highest
+2. `secret_resolver.get()` (a `ConfigProvider` instance, if field in `sensitive_fields`)
+3. `config_provider.get()` (a `ConfigProvider` instance, if field NOT in `sensitive_fields`)
+4. Model default value (optional fields only)
+5. `ConfigError` raised (required fields with no default)
+
+Both `config_provider` and `secret_resolver` use the same `ConfigProvider` protocol; `SecretResolver` is a backward-compatible alias.
+
+### 4.2 ConfigSchema (`from mh_orchestration_service import ConfigSchema`)
+
+Required fields (no defaults): `db_type`, `db_path`
+
+Optional fields: `db_host`, `db_port`, `db_name`, `db_user`, `db_password`, `db_auto_schema`, `cors_origins`, `llm_api_key`, `llm_base_url`, `llm_model`, `enable_builtin_agents`, `dev_mode`, `log_level`
+
+### 4.3 ConfigMapping (`from mh_orchestration_service import ConfigMapping`)
+
+```python
+class ConfigMapping(BaseModel):
+    key_mapping: dict[str, str] = {}     # field_name -> remote config key
+    sensitive_keys: set[str] = set()     # field names treated as sensitive
+```
+
+---
+
+## 5. Per-Request Context API
+
+Import from `mh_orchestration_service`:
+
+```python
+from mh_orchestration_service import (
+    get_current_request,     # -> Request | None
+    get_current_cookies,     # -> dict[str, str]
+    get_current_auth_token,  # -> str (Bearer token or cookie fallback)
+    get_current_user_id,     # -> str | None (after auth)
+    get_current_locale,      # -> str ("zh" / "en")
+    get_current_trace_id,    # -> str (from X-Request-Id or auto-generated)
+)
+```
+
+Context is initialized by middleware at request start, cleaned at request end. Use these in any adapter method that needs request awareness.
+
+---
+
+## 6. Default Built-in Behavior
+
+When an adapter is not injected:
+
+| Adapter | Default | Behavior |
+|---------|---------|----------|
+| `token_verifier` | `_DefaultAuthProvider` | Reads `X-User-Id` header or `x-user-id` cookie; no signature check |
+| `permission_checker` | `_DefaultAuthProvider` (shared) | Built-in permission table for `admin`/`member`/`user` |
+| `registry_provider` | `RegistryClient` | Empty when `enable_builtin_agents=false`, demo data when true |
+| `outbound_auth_provider` | `_DefaultOutboundAuthProvider` | Forwards all non-hop-by-hop headers |
+| `m2m_auth_provider` | `_DefaultM2MAuthProvider` | Trusts `X-User-Id` header only |
+| `llm_provider_factory` | `OpenAILLMProvider` | Configured via `ORCH_LLM_*` env vars |
+
+---
+
+## 7. AppState Schema
+
+Accessible at runtime via `request.app.state.adapters`:
+
+```python
+adapters = request.app.state.adapters
+adapters.settings              # ConfigSchema
+adapters.token_verifier        # UserAuthProvider
+adapters.permission_checker    # PermissionChecker
+adapters.registry_provider     # RegistryProvider
+adapters.llm_provider_factory  # Callable[[], LLMProvider]
+adapters.outbound_auth_provider # OutboundAuthProvider
+adapters.m2m_auth_provider     # M2MAuthProvider
+adapters.logger                # logging.Logger
+```
+
+---
+
+## 8. Chat SSE Stream Protocol
+
+`POST /api/v1/chat/{memory_id}` returns SSE events with `event:` and `data:` fields:
+
+```
+event: AgentStart\ndata: {}\n\n
+event: LLMStart\ndata: {"tool_names":[...],"message_count":N,"total_chars":N}\n\n
+event: LLMChunk\ndata: {"content":"...","reasoning":"...","tool_calls":[...]}\n\n
+event: LLMEnd\ndata: {"content":"...","reasoning_content":"...","tool_calls":[...],"usage":{...},"error":null}\n\n
+event: ExecutionStart\ndata: {"tool_calls":[...]}\n\n
+event: ToolStart\ndata: {"tool_call":{...},"display_name":"..."}\n\n
+event: ToolProgress\ndata: {"tool_call":{...},"chunk":...}\n\n
+event: ToolEnd\ndata: {"tool_call":{...},"result":"...","meta":{...}}\n\n
+event: ExecutionEnd\ndata: {"results":[...],"error":null}\n\n
+event: AgentEnd\ndata: {"response":"...","time_taken":N,"exceeded":false,"interrupted":false,"error":null}\n\n
+event: MemoryUpdate\ndata: {"usage":{...}}\n\n
+event: done\ndata: {}\n\n
+```
+
+---
+
+## 9. Database
+
+- `init_db()` called in lifespan with `settings.database_url` and `settings.db_type`
+- Backend selection: `DatabaseBackend.get(db_type)` — built-in: `sqlite` via `aiosqlite`, `opengauss` via `async-gaussdb`
+- `db_auto_schema=True` (default) calls `init_schema()` to create tables
+- All tables have audit columns: `created_by`, `last_updated_by`, `creation_date`, `last_update_date`, `delete_flag` (N/Y), `last_update_trace_id`
+- Primary keys are snowflake-like BIGINTs, not auto-increment
+
+---
+
+## 10. Error Handling
+
+| Error | Source | Behavior |
+|-------|--------|----------|
+| `ConfigError` | `ConfigManager.resolve()` | Process exits with missing field list |
+| `RuntimeError` | `get_db()` | E.g. database accessed before `init_db()` |
+| 401 | Auth middleware | Invalid/missing token |
+| 403 | PermissionMiddleware | Missing permission for tool/agent/scenario |
+| 403 | Chat endpoint | Session doesn't belong to user |
+| 404 | Various | Session/agent/tool/scenario not found |
+| 501 | Auth login | CredentialVerifier not injected |

@@ -1,0 +1,253 @@
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable
+from typing import Callable
+
+from fastapi import Request
+from minimal_harness.agent.registry import AgentRegistry
+from minimal_harness.agent.runtime import AgentRuntime
+from minimal_harness.llm.llm import LLMProvider
+from minimal_harness.memory_store import SessionStoreProtocol
+from minimal_harness.tool.registry import ToolRegistry
+from minimal_harness.types import (
+    AgentMetadata,
+    LocalAgentBinding,
+    LocalToolBinding,
+    RemoteAgentBinding,
+    RemoteToolBinding,
+    ToolMetadata,
+)
+
+from mh_orchestration_service.api.locale import parse_locale_json
+from mh_orchestration_service.services.audit_middleware import AuditMiddleware
+from mh_orchestration_service.services.database import get_session_store
+from mh_orchestration_service.services.m2m_auth import M2MAuthProvider
+from mh_orchestration_service.services.outbound_auth import OutboundAuthProvider
+from mh_orchestration_service.services.perm_middleware import PermissionMiddleware
+
+# ── Per-session concurrency lock ──────────────────────────────────────────────
+
+_SESSION_LOCKS: dict[str, asyncio.Lock] = {}
+_SESSION_LOCKS_MUTEX = asyncio.Lock()
+
+
+async def acquire_session_lock(session_id: str) -> asyncio.Lock:
+    """Get (or create) and acquire a per-session lock.
+
+    This serialises writes to the same ``session_id`` so that concurrent
+    chat requests cannot race on ``save_memory``.
+    """
+    async with _SESSION_LOCKS_MUTEX:
+        if session_id not in _SESSION_LOCKS:
+            _SESSION_LOCKS[session_id] = asyncio.Lock()
+        lock = _SESSION_LOCKS[session_id]
+    await lock.acquire()
+    return lock
+
+
+async def release_session_lock(session_id: str, lock: asyncio.Lock) -> None:
+    """Release a per-session lock and prune it from the dictionary."""
+    lock.release()
+    async with _SESSION_LOCKS_MUTEX:
+        _SESSION_LOCKS.pop(session_id, None)
+
+
+def _make_extra_headers_provider(
+    provider: OutboundAuthProvider,
+    request: Request,
+    target_url: str,
+    target_type: str,
+) -> Callable[[], Awaitable[dict[str, str]]]:
+    """Return a closure that calls the provider at execution time."""
+
+    async def _inner() -> dict[str, str]:
+        return await provider.get_headers(request, target_url, target_type)
+
+    return _inner
+
+
+async def _agent_binding(
+    meta: dict,
+    request: Request | None = None,
+    m2m_auth_provider: M2MAuthProvider | None = None,
+    identity: str = "",
+    outbound_auth_provider: OutboundAuthProvider | None = None,
+) -> RemoteAgentBinding | LocalAgentBinding:
+    if "endpoint_url" in meta and meta["endpoint_url"]:
+        url = meta["endpoint_url"]
+        if request and url.startswith("/"):
+            url = str(request.base_url).rstrip("/") + url
+        headers: dict[str, str] = {}
+        if m2m_auth_provider is not None and request is not None and identity:
+            headers = await m2m_auth_provider.get_identity_headers(request, identity)
+        extra_provider = None
+        if outbound_auth_provider is not None and request is not None:
+            extra_provider = _make_extra_headers_provider(
+                outbound_auth_provider, request, url, "agent"
+            )
+        return RemoteAgentBinding(
+            url=url, headers=headers, extra_headers_provider=extra_provider
+        )
+    return LocalAgentBinding()
+
+
+async def _tool_binding(
+    meta: dict,
+    name: str,
+    request: Request | None = None,
+    m2m_auth_provider: M2MAuthProvider | None = None,
+    identity: str = "",
+    outbound_auth_provider: OutboundAuthProvider | None = None,
+) -> RemoteToolBinding | LocalToolBinding:
+    if "endpoint_url" in meta and meta["endpoint_url"]:
+        url = meta["endpoint_url"]
+        if request and url.startswith("/"):
+            url = str(request.base_url).rstrip("/") + url
+        headers: dict[str, str] = {}
+        if m2m_auth_provider is not None and request is not None and identity:
+            headers = await m2m_auth_provider.get_identity_headers(request, identity)
+        extra_provider = None
+        if outbound_auth_provider is not None and request is not None:
+            extra_provider = _make_extra_headers_provider(
+                outbound_auth_provider, request, url, "tool"
+            )
+        return RemoteToolBinding(
+            url=url,
+            headers=headers,
+            extra_headers_provider=extra_provider,
+            timeout=60.0,
+        )
+    fn = meta.get("_fn")
+    return LocalToolBinding(fn=fn)
+
+
+async def create_runtime(
+    request: Request,
+    user_id: str,
+    agent_name: str,
+    tool_names: list[str],
+    session_store: SessionStoreProtocol | None = None,
+    session_id: str = "",
+) -> tuple[AgentRuntime, AgentRegistry, ToolRegistry, SessionStoreProtocol]:
+    adapters = request.app.state.adapters
+    llm_provider_registry = getattr(adapters, "llm_provider_registry", None)
+    llm_extra_headers = getattr(adapters, "llm_extra_headers_provider", None)
+    outbound_auth_provider = getattr(adapters, "outbound_auth_provider", None)
+
+    agent_registry = AgentRegistry()
+
+    # ── Build agent→tool_names map from all scenarios ──
+    scenario_tool_names: dict[str, list[str]] = {}
+    for s in await adapters.management_provider.list_scenarios():
+        for a in s.get("agents", []):
+            name = a["name"]
+            tools = a.get("tool_names", [])
+            if name not in scenario_tool_names:
+                scenario_tool_names[name] = list(tools)
+            else:
+                existing = set(scenario_tool_names[name])
+                for t in tools:
+                    if t not in existing:
+                        scenario_tool_names[name].append(t)
+                        existing.add(t)
+
+    # Register ALL agents so handoff/discover_agents can find them
+    for a in await adapters.management_provider.list_agents():
+        await agent_registry.register(
+            AgentMetadata(
+                name=a["name"],
+                display_name=a.get("display_name", a["name"]),
+                display_name_locale=parse_locale_json(a.get("display_name_locale")),
+                description=a.get("description", ""),
+                description_locale=parse_locale_json(a.get("description_locale")),
+                system_prompt=a.get("system_prompt", ""),
+                system_prompt_locale=parse_locale_json(a.get("system_prompt_locale")),
+                metadata_id=a["name"],
+                tool_names=scenario_tool_names.get(a["name"], []),
+                provider=a.get("provider", "openai"),
+                model=a.get("model", ""),
+                llm_config=a.get("llm_config", {}),
+                binding=await _agent_binding(
+                    a,
+                    request,
+                    m2m_auth_provider=adapters.m2m_auth_provider,
+                    identity=user_id,
+                    outbound_auth_provider=outbound_auth_provider,
+                ),
+            )
+        )
+
+    all_tool_names = set(tool_names)
+    all_tool_names.update(scenario_tool_names.get(agent_name, []))
+
+    tool_registry = ToolRegistry()
+    for tname in all_tool_names:
+        tool_meta = await adapters.management_provider.get_tool(tname)
+        if tool_meta is None:
+            continue
+        params = tool_meta.get("parameters", {"type": "object", "properties": {}})
+        await tool_registry.register(
+            ToolMetadata(
+                name=tool_meta["name"],
+                display_name=tool_meta.get("display_name", tool_meta["name"]),
+                display_name_locale=parse_locale_json(
+                    tool_meta.get("display_name_locale")
+                ),
+                description=tool_meta.get("description", ""),
+                description_locale=parse_locale_json(
+                    tool_meta.get("description_locale")
+                ),
+                parameters=params,
+                binding=await _tool_binding(
+                    tool_meta,
+                    tname,
+                    request,
+                    m2m_auth_provider=adapters.m2m_auth_provider,
+                    identity=user_id,
+                    outbound_auth_provider=outbound_auth_provider,
+                ),
+            )
+        )
+
+    if session_store is None:
+        session_store = await get_session_store()
+    middleware = [
+        PermissionMiddleware(user_id, adapters.permission_checker),
+        AuditMiddleware(user_id=user_id, session_id=session_id),
+    ]
+
+    llm_provider_resolver: Callable[[AgentMetadata], LLMProvider] | None = None
+    if llm_provider_registry is not None:
+
+        def _resolver(meta: AgentMetadata) -> LLMProvider:
+            cfg: dict = {
+                "model": meta.model,
+                "_extra_headers_provider": llm_extra_headers,
+            }
+            cfg.update(meta.llm_config)
+            return llm_provider_registry.create(meta.provider, cfg)
+
+        llm_provider_resolver = _resolver
+    else:
+        llm_provider_factory = getattr(adapters, "llm_provider_factory", None)
+        if llm_provider_factory is not None:
+
+            def _fallback_resolver(meta: AgentMetadata) -> LLMProvider:  # noqa: ARG001
+                return llm_provider_factory()
+
+            llm_provider_resolver = _fallback_resolver
+
+    assert llm_provider_resolver is not None, (
+        "No LLM provider resolver or factory configured"
+    )
+
+    runtime = AgentRuntime(
+        agent_registry=agent_registry,
+        session_store=session_store,
+        tool_registry=tool_registry,
+        middleware=middleware,
+        llm_provider_resolver=llm_provider_resolver,
+    )
+
+    return runtime, agent_registry, tool_registry, session_store
