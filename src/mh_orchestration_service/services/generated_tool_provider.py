@@ -46,10 +46,6 @@ class ToolGenerator(Protocol):
     ) -> AsyncGenerator[dict[str, Any], None]: ...
 
 
-# Backward-compat alias
-GeneratedToolProvider = ToolGenerator
-
-
 def tool_to_dict(t: GeneratedToolMeta) -> dict[str, Any]:
     return {
         "name": t.name,
@@ -203,5 +199,3 @@ class DefaultToolGenerator:
         yield {"type": "generated", "data": tool_to_dict(tool)}
 
 
-# Backward-compat alias
-DefaultGeneratedToolProvider = DefaultToolGenerator
