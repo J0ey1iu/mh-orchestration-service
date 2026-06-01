@@ -11,7 +11,7 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
 
     "pydantic-settings>=2.0",
-    "minimal-harness>=0.6.2a7",
+    "minimal-harness>=0.6.2a8",
 ]
 
 [build-system]
