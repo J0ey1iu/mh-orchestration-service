@@ -7,6 +7,9 @@ from mh_orchestration_service.api.guide import router as guide_router
 from mh_orchestration_service.api.runtime_tools import router as runtime_tools_router
 from mh_orchestration_service.api.scenarios import router as scenarios_router
 from mh_orchestration_service.api.sessions import router as sessions_router
+from mh_orchestration_service.api.agent_generator import (
+    agent_generator_router,
+)
 from mh_orchestration_service.api.tool_generator import (
     generated_execute_router,
     tool_generator_router,
@@ -25,4 +28,5 @@ router.include_router(tools_router)
 router.include_router(runtime_tools_router)
 router.include_router(tool_generator_router)
 router.include_router(generated_execute_router)
+router.include_router(agent_generator_router)
 router.include_router(management_router)

@@ -197,5 +197,3 @@ class DefaultToolGenerator:
         )
 
         yield {"type": "generated", "data": tool_to_dict(tool)}
-
-
