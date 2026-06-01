@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable
-from typing import Callable
+from typing import Any, Callable
 
 from fastapi import Request
 from minimal_harness.agent.registry import AgentRegistry
 from minimal_harness.agent.runtime import AgentRuntime
+from minimal_harness.auth import match_permission
 from minimal_harness.llm.llm import LLMProvider
 from minimal_harness.memory_store import SessionStoreProtocol
 from minimal_harness.tool.registry import ToolRegistry
@@ -99,11 +100,14 @@ async def _tool_binding(
     m2m_auth_provider: M2MAuthProvider | None = None,
     identity: str = "",
     outbound_auth_provider: OutboundAuthProvider | None = None,
+    scenario_id: str = "",
 ) -> RemoteToolBinding | LocalToolBinding:
     if "endpoint_url" in meta and meta["endpoint_url"]:
         url = meta["endpoint_url"]
         if request and url.startswith("/"):
             url = str(request.base_url).rstrip("/") + url
+        if scenario_id and name in ("discover_agents", "handoff"):
+            url = f"{url}?scenario_id={scenario_id}"
         headers: dict[str, str] = {}
         if m2m_auth_provider is not None and request is not None and identity:
             headers = await m2m_auth_provider.get_identity_headers(request, identity)
@@ -122,6 +126,38 @@ async def _tool_binding(
     return LocalToolBinding(fn=fn)
 
 
+async def _get_permitted_scenario_agents(
+    management_provider: Any,
+    permission_checker: Any,
+    scenario_id: str,
+    user_id: str,
+) -> set[str] | None:
+    """Resolve scenario agents and intersect with user permissions.
+
+    Returns ``None`` when *scenario_id* is empty (no filtering).
+    Returns ``set[str]`` of agent names the user can access within the scenario.
+    """
+    if not scenario_id:
+        return None
+
+    scenario_agent_names: set[str] | None = None
+    for s in await management_provider.list_scenarios():
+        if s.get("id") == scenario_id:
+            scenario_agent_names = {a["name"] for a in s.get("agents", [])}
+            break
+    if scenario_agent_names is None:
+        return set()
+
+    if permission_checker is not None:
+        user_perms = await permission_checker.get_permissions(user_id)
+        scenario_agent_names = {
+            name
+            for name in scenario_agent_names
+            if match_permission(user_perms, f"use:agent:{name}")
+        }
+    return scenario_agent_names
+
+
 async def create_runtime(
     request: Request,
     user_id: str,
@@ -129,6 +165,7 @@ async def create_runtime(
     tool_names: list[str],
     session_store: SessionStoreProtocol | None = None,
     session_id: str = "",
+    scenario_id: str = "",
 ) -> tuple[AgentRuntime, AgentRegistry, ToolRegistry, SessionStoreProtocol]:
     adapters = request.app.state.adapters
     llm_provider_registry = getattr(adapters, "llm_provider_registry", None)
@@ -152,8 +189,29 @@ async def create_runtime(
                         scenario_tool_names[name].append(t)
                         existing.add(t)
 
-    # Register ALL agents so handoff/discover_agents can find them
+    scenario_agent_names = await _get_permitted_scenario_agents(
+        adapters.management_provider,
+        adapters.permission_checker,
+        scenario_id,
+        user_id,
+    )
+
+    # When there is no scenario filter, check permissions per-agent
+    user_perms: list[str] | None = None
+    if scenario_agent_names is None:
+        if adapters.permission_checker:
+            user_perms = await adapters.permission_checker.get_permissions(user_id)
+        # user_perms stays None when no permission_checker — all agents pass
+
+    # Register agents — filtered by scenario + permissions
     for a in await adapters.management_provider.list_agents():
+        name = a["name"]
+        if scenario_agent_names is not None and name not in scenario_agent_names:
+            continue
+        if user_perms is not None and not match_permission(
+            user_perms, f"use:agent:{name}"
+        ):
+            continue
         await agent_registry.register(
             AgentMetadata(
                 name=a["name"],
@@ -206,6 +264,7 @@ async def create_runtime(
                     m2m_auth_provider=adapters.m2m_auth_provider,
                     identity=user_id,
                     outbound_auth_provider=outbound_auth_provider,
+                    scenario_id=scenario_id,
                 ),
             )
         )

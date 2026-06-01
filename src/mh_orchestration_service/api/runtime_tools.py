@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
+from minimal_harness.auth import match_permission
 from minimal_harness.memory import system_message, user_message
 from minimal_harness.types import (
     AgentEnd,
@@ -28,6 +29,7 @@ from mh_orchestration_service.api.locale import (
 )
 from mh_orchestration_service.services.database import get_session_store
 from mh_orchestration_service.services.runtime_service import (
+    _get_permitted_scenario_agents,
     acquire_session_lock,
     create_runtime,
     release_session_lock,
@@ -80,16 +82,36 @@ async def discover_agents_execute(
     accept_language: str | None = Header(None, alias="Accept-Language"),
     app_id: str = Depends(verify_m2m_request),
 ):
-    adapters = request.app.state.adapters
     args = body.get("args", {})
     locale = args.get("locale") or parse_locale(accept_language)
     exclude = args.get("exclude")
+    scenario_id = request.query_params.get("scenario_id", "")
 
     async def event_stream():
+        adapters = request.app.state.adapters
+        scenario_agent_names = await _get_permitted_scenario_agents(
+            adapters.management_provider,
+            adapters.permission_checker,
+            scenario_id,
+            app_id,
+        )
+
+        user_perms: list[str] | None = None
+        if scenario_agent_names is None:
+            if adapters.permission_checker:
+                user_perms = await adapters.permission_checker.get_permissions(app_id)
+
         agents = await adapters.management_provider.list_agents()
         result = []
         for a in agents:
-            if exclude and a.get("name") == exclude:
+            name = a["name"]
+            if exclude and name == exclude:
+                continue
+            if scenario_agent_names is not None and name not in scenario_agent_names:
+                continue
+            if user_perms is not None and not match_permission(
+                user_perms, f"use:agent:{name}"
+            ):
                 continue
             result.append(
                 {
@@ -132,6 +154,8 @@ async def handoff_execute(
 
         return StreamingResponse(_error_stream(), media_type="text/event-stream")
 
+    scenario_id = request.query_params.get("scenario_id", "")
+
     async def event_stream():
         adapters = request.app.state.adapters
 
@@ -166,6 +190,7 @@ async def handoff_execute(
                 tool_names=[],
                 session_store=store,
                 session_id=handoff_session_id,
+                scenario_id=scenario_id,
             )
 
             sub_task, sub_stop_event, queue = await runtime.run(
