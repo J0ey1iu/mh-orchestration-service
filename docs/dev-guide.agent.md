@@ -141,23 +141,112 @@ class ConfigProvider(Protocol):
 - `SecretResolver` is a backward-compatible alias; `from mh_orchestration_service import SecretResolver` still works
 - `ConfigManager` accepts two `ConfigProvider` instances — `config_provider` and `secret_resolver` — differentiated by the `sensitive_fields` parameter
 
+### 2.7 MetadataManager (`from minimal_harness.adapters import MetadataManager`)
+
+```python
+@runtime_checkable
+class MetadataManager(RegistryProvider, Protocol):
+    # Inherits all RegistryProvider read methods:
+    #   get_agent, list_agents, get_tool, list_tools,
+    #   get_scenario, list_scenarios
+
+    # Tool CRUD
+    async def create_tool(self, tool: dict[str, Any]) -> dict[str, Any]: ...
+    async def update_tool(self, name: str, tool: dict[str, Any]) -> dict[str, Any]: ...
+    async def delete_tool(self, name: str) -> None: ...
+
+    # Agent CRUD
+    async def create_agent(self, agent: dict[str, Any]) -> dict[str, Any]: ...
+    async def update_agent(self, name: str, agent: dict[str, Any]) -> dict[str, Any]: ...
+    async def delete_agent(self, name: str) -> None: ...
+
+    # Scenario CRUD
+    async def create_scenario(self, scenario: dict[str, Any]) -> dict[str, Any]: ...
+    async def update_scenario(self, scenario_id: str, scenario: dict[str, Any]) -> dict[str, Any]: ...
+    async def delete_scenario(self, scenario_id: str) -> None: ...
+
+    # Scenario-Agent-Tool relationships
+    async def add_scenario_agent(self, scenario_id, agent_name, tool_names=None) -> dict: ...
+    async def remove_scenario_agent(self, scenario_id, agent_name) -> dict: ...
+    async def add_agent_tool(self, scenario_id, agent_name, tool_name) -> dict: ...
+    async def remove_agent_tool(self, scenario_id, agent_name, tool_name) -> dict: ...
+
+    async def close(self) -> None: ...
+```
+
+- Extends `RegistryProvider` with write operations
+- Injected via `management_provider` LifespanHook (not `registry_provider`)
+- Powers the management CRUD API endpoints at `GET/POST/PUT/DELETE /api/v1/management/*`
+
+### 2.8 ToolGenerator (`from mh_orchestration_service.services.generated_tool_provider import ToolGenerator`)
+
+```python
+@runtime_checkable
+class ToolGenerator(Protocol):
+    def generate_stream(self, natural_description: str) -> AsyncGenerator[dict[str, Any], None]: ...
+```
+
+- Yields SSE events: `{"type": "generating", "data": {...}}` → `{"type": "generated", "data": {tool_dict}}`
+- Default: `DefaultToolGenerator` (LLM-based, reuses `llm_provider_factory`)
+- Injected via `generated_tool_provider` LifespanHook
+
+### 2.9 AgentGenerator (`from mh_orchestration_service.services.generated_agent_provider import AgentGenerator`)
+
+```python
+@runtime_checkable
+class AgentGenerator(Protocol):
+    def generate_stream(self, natural_description: str) -> AsyncGenerator[dict[str, Any], None]: ...
+```
+
+- Symmetrical to `ToolGenerator`; same event protocol
+- Default: `DefaultAgentGenerator` (LLM-based)
+- Injected via `generated_agent_provider` LifespanHook
+
+### 2.10 ExtraHeadersProvider (`from minimal_harness.types import ExtraHeadersProvider`)
+
+```python
+ExtraHeadersProvider = Callable[[], Awaitable[dict[str, str]]]
+```
+
+- **NOT a LifespanHook** — passed directly to `create_app()` as `llm_extra_headers_provider`
+- Called before each LLM API request to inject dynamic HTTP headers (e.g. `x-reasoning-format`)
+- Stored in `app.state.adapters.llm_extra_headers_provider`
+
+### 2.11 LLMProviderRegistry (`from minimal_harness.llm.llm import LLMProviderRegistry`)
+
+```python
+class LLMProviderRegistry:
+    def register(self, name: str, factory: Callable[[dict[str, Any]], LLMProvider]) -> None: ...
+    def set_default_config(self, name: str, cfg: dict[str, Any]) -> None: ...
+    def create(self, provider: str, cfg: dict[str, Any]) -> LLMProvider: ...
+    def list_providers(self) -> list[str]: ...
+```
+
+- Injected via `llm_provider_registry` LifespanHook
+- Enables per-agent provider/model selection via Agent's `provider` + `model` fields
+- Built-in providers: `openai`, `anthropic`, `openai_viz`
+- Default configs from env vars: `ORCH_PROVIDER_{NAME}__{KEY}` (e.g. `ORCH_PROVIDER_OPENAI__API_KEY`)
+
 ---
 
 ## 3. Adapter Injection via LifespanHook
 
-Every adapter is injected as a `LifespanHook` (`Callable[[FastAPI], AbstractAsyncContextManager[None]]`):
+Every adapter is injected as a `LifespanHook` (`Callable[[FastAPI], AbstractAsyncContextManager[None]]`, exported as `LifespanHook` from `mh_orchestration_service`):
 
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from minimal_harness.adapters import MetadataManager
 
 @asynccontextmanager
 async def my_hook(app: FastAPI):
     # on startup
-    app.state.adapters.registry_provider = MyRegistry()
+    mgmt = MyMetadataManager()
+    app.state.adapters.registry_provider = mgmt
+    app.state.adapters.management_provider = mgmt
     yield
     # on shutdown — close resources
-    await app.state.adapters.registry_provider.close()
+    await mgmt.close()
 ```
 
 Pass named hooks to `create_app()`:
@@ -165,13 +254,24 @@ Pass named hooks to `create_app()`:
 ```python
 app = create_app(
     settings=settings,
+
+    # Named adapter hooks (run in this order)
     token_verifier=my_token_verifier_hook,
     permission_checker=my_permission_checker_hook,
-    registry_provider=my_registry_provider_hook,
+    management_provider=my_management_provider_hook,  # replaces legacy registry_provider
+    llm_provider_factory=my_llm_factory_hook,
+    llm_provider_registry=my_provider_registry_hook,
     outbound_auth_provider=my_outbound_auth_hook,
     m2m_auth_provider=my_m2m_auth_hook,
-    llm_provider_factory=my_llm_factory_hook,
-    lifespan_hooks=[my_cross_cutting_hook],  # generic hooks run last
+    generated_tool_provider=my_tool_generator_hook,
+    generated_agent_provider=my_agent_generator_hook,
+
+    # Direct callable (NOT a LifespanHook)
+    llm_extra_headers_provider=my_extra_headers_fn,
+
+    # Generic hooks run last
+    lifespan_hooks=[my_cross_cutting_hook],
+
     logger=my_logger,
 )
 ```
@@ -212,7 +312,9 @@ Both `config_provider` and `secret_resolver` use the same `ConfigProvider` proto
 
 Required fields (no defaults): `db_type`, `db_path`
 
-Optional fields: `db_host`, `db_port`, `db_name`, `db_user`, `db_password`, `db_auto_schema`, `cors_origins`, `llm_api_key`, `llm_base_url`, `llm_model`, `enable_builtin_agents`, `dev_mode`, `log_level`
+Optional fields: `db_host`, `db_port`, `db_name`, `db_user`, `db_password`, `db_auto_schema`, `cors_origins`, `enable_builtin_agents`, `dev_mode`, `enable_eval`, `eval_results_dir`, `log_level`
+
+> **Note:** `llm_api_key`, `llm_base_url`, `llm_model` were removed from `ConfigSchema`. LLM configuration is now handled by `LLMProviderRegistry` with per-provider defaults via env vars `ORCH_PROVIDER_{NAME}__{KEY}` (e.g. `ORCH_PROVIDER_OPENAI__API_KEY=sk-xxx`).
 
 ### 4.3 ConfigMapping (`from mh_orchestration_service import ConfigMapping`)
 
@@ -251,10 +353,15 @@ When an adapter is not injected:
 |---------|---------|----------|
 | `token_verifier` | `_DefaultAuthProvider` | Reads `X-User-Id` header or `x-user-id` cookie; no signature check |
 | `permission_checker` | `_DefaultAuthProvider` (shared) | Built-in permission table for `admin`/`member`/`user` |
-| `registry_provider` | `RegistryClient` | Empty when `enable_builtin_agents=false`, demo data when true |
+| `registry_provider` | `InMemoryManagementProvider` | Empty when `enable_builtin_agents=false`, demo data when true |
+| `management_provider` | `InMemoryManagementProvider` (same instance as `registry_provider`) | CRUD API available only when `registry_provider` implements `MetadataManager` |
 | `outbound_auth_provider` | `_DefaultOutboundAuthProvider` | Forwards all non-hop-by-hop headers |
 | `m2m_auth_provider` | `_DefaultM2MAuthProvider` | Trusts `X-User-Id` header only |
-| `llm_provider_factory` | `OpenAILLMProvider` | Configured via `ORCH_LLM_*` env vars |
+| `llm_provider_factory` | `OpenAILLMProvider` | Created from `llm_provider_registry.create("openai", {})` |
+| `llm_provider_registry` | `LLMProviderRegistry` | Built-in `openai`, `anthropic`, `openai_viz` registered; defaults from `ORCH_PROVIDER_*` env vars |
+| `llm_extra_headers_provider` | `None` | No extra headers injected |
+| `generated_tool_provider` | `DefaultToolGenerator` | LLM-based; reuses `llm_provider_factory` |
+| `generated_agent_provider` | `DefaultAgentGenerator` | LLM-based; reuses `llm_provider_factory` |
 
 ---
 
@@ -264,14 +371,19 @@ Accessible at runtime via `request.app.state.adapters`:
 
 ```python
 adapters = request.app.state.adapters
-adapters.settings              # ConfigSchema
-adapters.token_verifier        # UserAuthProvider
-adapters.permission_checker    # PermissionChecker
-adapters.registry_provider     # RegistryProvider
-adapters.llm_provider_factory  # Callable[[], LLMProvider]
-adapters.outbound_auth_provider # OutboundAuthProvider
-adapters.m2m_auth_provider     # M2MAuthProvider
-adapters.logger                # logging.Logger
+adapters.settings                # ConfigSchema
+adapters.token_verifier          # UserAuthProvider
+adapters.permission_checker      # PermissionChecker
+adapters.registry_provider       # RegistryProvider
+adapters.management_provider     # MetadataManager | None
+adapters.llm_provider_factory    # Callable[[], LLMProvider]
+adapters.llm_provider_registry   # LLMProviderRegistry
+adapters.llm_extra_headers_provider  # ExtraHeadersProvider | None
+adapters.outbound_auth_provider  # OutboundAuthProvider
+adapters.m2m_auth_provider       # M2MAuthProvider
+adapters.generated_tool_provider # ToolGenerator | None
+adapters.generated_agent_provider # AgentGenerator | None
+adapters.logger                  # logging.Logger
 ```
 
 ---
@@ -301,7 +413,7 @@ event: done\ndata: {}\n\n
 
 - `init_db()` called in lifespan with `settings.database_url` and `settings.db_type`
 - Backend selection: `DatabaseBackend.get(db_type)` — built-in: `sqlite` via `aiosqlite`, `opengauss` via `async-gaussdb`
-- `db_auto_schema=True` (default) calls `init_schema()` to create tables
+- `db_auto_schema=False` (default) — set to `True` to call `init_schema()` automatically
 - All tables have audit columns: `created_by`, `last_updated_by`, `creation_date`, `last_update_date`, `delete_flag` (N/Y), `last_update_trace_id`
 - Primary keys are snowflake-like BIGINTs, not auto-increment
 
@@ -317,4 +429,4 @@ event: done\ndata: {}\n\n
 | 403 | PermissionMiddleware | Missing permission for tool/agent/scenario |
 | 403 | Chat endpoint | Session doesn't belong to user |
 | 404 | Various | Session/agent/tool/scenario not found |
-| 501 | Auth login | CredentialVerifier not injected |
+| 501 | Management API | `management_provider` is None (not injected) |

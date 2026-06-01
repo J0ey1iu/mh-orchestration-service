@@ -65,8 +65,9 @@ config_mgr = ConfigManager()  # 仅从环境变量读取
 
 # ── 3. 定义 LifespanHook ──────────────────────
 @asynccontextmanager
-async def my_registry_provider(app):
+async def my_management_provider(app):
     app.state.adapters.registry_provider = MyRegistry()
+    app.state.adapters.management_provider = MyRegistry()  # 如果也实现了 MetadataManager
     yield
 
 
@@ -77,7 +78,7 @@ settings = asyncio.run(config_mgr.resolve(ConfigSchema, prefix="ORCH"))
 # ── 5. 组装应用 ───────────────────────────────
 app = create_app(
     settings=settings,
-    registry_provider=my_registry_provider,
+    management_provider=my_management_provider,  # 代替旧的 registry_provider
 )
 ```
 
@@ -142,6 +143,16 @@ class MyRegistry(RegistryProvider):
 | Tool | `name`, `display_name`, `description`, `parameters`, `display_name_locale`, `description_locale`, `endpoint_url`, `_fn` | `parameters` 为 JSON Schema；`endpoint_url` 非空则远程执行，否则本地执行 `_fn` |
 | Scenario | `id`, `name`, `description`, `agents`, `name_locale`, `icon` | `agents` 为 `[{name, tool_names}]` |
 
+> **MetadataManager** 是推荐的统一读写协议，继承自 `RegistryProvider` 并扩展了 CRUD 方法：
+> `create_agent/update_agent/delete_agent`、`create_tool/update_tool/delete_tool`、
+> `create_scenario/update_scenario/delete_scenario` 以及场景-Agent-Tool 关系管理方法。
+> `management_provider` AppState 槽位优先期望 `MetadataManager` 实现。
+>
+> ```python
+> from minimal_harness.adapters import MetadataManager
+> # MetadataManager 继承了 RegistryProvider 所有读方法 + 上述 CRUD 方法
+> ```
+
 #### OutboundAuthProvider — 出站认证注入
 
 ```python
@@ -188,6 +199,65 @@ class VaultSecretResolver(ConfigProvider):
         return await vault_client.read_secret(key)
 ```
 
+#### ToolGenerator — 工具自动生成
+
+由自然语言描述生成可执行工具的元数据和源码，适配器由 `app.state.adapters.generated_tool_provider` 注入。
+
+```python
+from mh_orchestration_service.services.generated_tool_provider import ToolGenerator
+from collections.abc import AsyncGenerator
+
+class MyToolGenerator(ToolGenerator):
+    def generate_stream(self, natural_description: str) -> AsyncGenerator[dict[str, Any], None]:
+        ...
+```
+
+默认实现使用 LLM 生成。持久化由 `MetadataManager` 负责。
+
+#### AgentGenerator — Agent 自动生成
+
+由自然语言描述生成 Agent 元数据和 system prompt。
+
+```python
+from mh_orchestration_service.services.generated_agent_provider import AgentGenerator
+
+class MyAgentGenerator(AgentGenerator):
+    def generate_stream(self, natural_description: str) -> AsyncGenerator[dict[str, Any], None]:
+        ...
+```
+
+#### ExtraHeadersProvider — LLM 额外 HTTP 头
+
+**注意：这不是 LifespanHook，而是直接传给 `create_app()` 的 `Callable`。**
+
+```python
+from minimal_harness.types import ExtraHeadersProvider
+# 实际是 Callable[[], Awaitable[dict[str, str]]]
+
+async def my_extra_headers() -> dict[str, str]:
+    return {"x-reasoning-format": "deepseek"}
+```
+
+用于向 LLM API 调用注入动态 HTTP 头（如推理格式标记）。通过 `llm_extra_headers_provider` 参数传入 `create_app()`。
+
+#### LLMProviderRegistry — LLM Provider 注册表
+
+支持 per-agent 选择不同 LLM Provider / Model。`create_app()` 通过 `llm_provider_registry` LifespanHook 注入。
+
+```python
+from minimal_harness.llm.llm import LLMProviderRegistry
+
+@asynccontextmanager
+async def my_provider_registry(app: FastAPI):
+    registry = LLMProviderRegistry()
+    registry.register("my_llm", lambda cfg: MyCustomLLM(cfg))
+    registry.set_default_config("my_llm", {"api_key": "xxx"})
+    app.state.adapters.llm_provider_registry = registry
+    yield
+```
+
+内置已注册 `openai`、`anthropic`，并克隆了 `openai_viz`。Provider 默认配置通过环境变量 `ORCH_PROVIDER_{NAME}__{KEY}` 设置。
+
 ### 3. 使用 Per-request Context
 
 Adapter 内可直接获取当前请求上下文：
@@ -217,11 +287,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic import BaseModel
 from mh_orchestration_service import (
-    ConfigManager, ConfigSchema, ConfigMapping, create_app,
-    OutboundAuthProvider, M2MAuthProvider,
+    ConfigManager, ConfigSchema, ConfigMapping, LifespanHook, create_app,
+    OutboundAuthProvider, M2MAuthProvider, ConfigProvider,
 )
 from minimal_harness.auth import UserAuthProvider, PermissionChecker
-from minimal_harness.adapters import RegistryProvider
+from minimal_harness.adapters import MetadataManager  # 统一读写协议
 
 
 # ── 日志 ────────────────────────────────────────
@@ -240,8 +310,8 @@ config_mgr = ConfigManager(
 )
 
 mapping = ConfigMapping(
-    key_mapping={"llm_api_key": "woa.orchestration.llm.key"},
-    sensitive_keys={"llm_api_key"},
+    key_mapping={"db_password": "woa.orchestration.db.pw"},
+    sensitive_keys={"db_password"},
 )
 
 
@@ -258,9 +328,10 @@ class CorpAuth(UserAuthProvider):
 class CorpPerms(PermissionChecker):
     async def get_permissions(self, user_id): ...
 
-class CorpRegistry(RegistryProvider):
+class CorpRegistry(MetadataManager):  # 实现统一读写协议
     def __init__(self, api_url, api_token): ...
     async def list_agents(self): ...
+    async def create_agent(self, agent): ...
 
 
 # ── Lifespan Hooks ──────────────────────────────
@@ -275,15 +346,30 @@ async def permission_checker(app: FastAPI):
     yield
 
 @asynccontextmanager
-async def registry_provider(app: FastAPI):
+async def management_provider(app: FastAPI):
     cfg = await config_mgr.resolve(CorpRegistryConfig, prefix="CORP.REGISTRY", sensitive_fields={"api_token"})
-    app.state.adapters.registry_provider = CorpRegistry(cfg.api_url, cfg.api_token)
+    registry = CorpRegistry(cfg.api_url, cfg.api_token)
+    app.state.adapters.registry_provider = registry
+    app.state.adapters.management_provider = registry
     yield
 
 @asynccontextmanager
 async def outbound_auth(app: FastAPI):
     app.state.adapters.outbound_auth_provider = MyOutboundAuth()
     yield
+
+@asynccontextmanager
+async def my_provider_registry(app: FastAPI):
+    from minimal_harness.llm.llm import LLMProviderRegistry
+    from minimal_harness.llm.factory import register_builtin_providers
+    registry = LLMProviderRegistry()
+    register_builtin_providers(registry)
+    registry.register("my_llm", lambda cfg: MyLLM(cfg))
+    app.state.adapters.llm_provider_registry = registry
+    yield
+
+async def llm_extra_headers() -> dict[str, str]:
+    return {"x-reasoning-format": "deepseek"}
 
 
 # ── 组装 ────────────────────────────────────────
@@ -292,8 +378,10 @@ app = create_app(
     settings=settings,
     token_verifier=token_verifier,
     permission_checker=permission_checker,
-    registry_provider=registry_provider,
+    management_provider=management_provider,  # 替换旧的 registry_provider
     outbound_auth_provider=outbound_auth,
+    llm_extra_headers_provider=llm_extra_headers,  # Callable，非 LifespanHook
+    llm_provider_registry=my_provider_registry,     # LifespanHook
     logger=logger,
 )
 ```
@@ -323,18 +411,21 @@ uvicorn my_app:app --host 0.0.0.0 --port 8005 --workers 4
 | 字段 | 环境变量 | 必填 | 说明 |
 |------|---------|------|------|
 | `db_type` | `ORCH_DB_TYPE` | 是 | `sqlite` 或 `opengauss` |
-| `db_path` | `ORCH_DB_PATH` | 是 | SQLite 文件路径 |
+| `db_path` | `ORCH_DB_PATH` | 是 | SQLite 文件路径；openGauss 模式下为连接 URL |
 | `db_host` | `ORCH_DB_HOST` | 否 | openGauss 主机 |
 | `db_port` | `ORCH_DB_PORT` | 否 | 默认 5432 |
 | `db_name` | `ORCH_DB_NAME` | 否 | 数据库名 |
 | `db_user` | `ORCH_DB_USER` | 否 | 数据库用户 |
 | `db_password` | `ORCH_DB_PASSWORD` | 否 | 敏感字段 |
-| `cors_origins` | `ORCH_CORS_ORIGINS` | 否 | 逗号分隔 |
-| `llm_api_key` | `ORCH_LLM_API_KEY` | 否 | 敏感字段 |
-| `llm_base_url` | `ORCH_LLM_BASE_URL` | 否 | LLM 接口地址 |
-| `llm_model` | `ORCH_LLM_MODEL` | 否 | 模型名 |
+| `db_auto_schema` | `ORCH_DB_AUTO_SCHEMA` | 否 | 默认 false，自动建表 |
+| `cors_origins` | `ORCH_CORS_ORIGINS` | 否 | JSON 数组格式 |
 | `enable_builtin_agents` | `ORCH_ENABLE_BUILTIN_AGENTS` | 否 | 默认 false |
 | `dev_mode` | `ORCH_DEV_MODE` | 否 | 默认 false |
+| `enable_eval` | `ORCH_ENABLE_EVAL` | 否 | 默认 true，是否暴露评测接口 |
+| `eval_results_dir` | `ORCH_EVAL_RESULTS_DIR` | 否 | 默认 `./eval_results` |
+| `log_level` | `ORCH_LOG_LEVEL` | 否 | 默认 `INFO` |
+
+> `llm_api_key`/`llm_base_url`/`llm_model` 已从 `ConfigSchema` 移除。LLM 配置改为通过 `LLMProviderRegistry` + 环境变量 `ORCH_PROVIDER_{NAME}__{KEY}` 设置。例如 `ORCH_PROVIDER_OPENAI__API_KEY=sk-xxx`。
 
 ---
 
@@ -350,10 +441,28 @@ uvicorn my_app:app --host 0.0.0.0 --port 8005 --workers 4
 | POST | `/api/v1/sessions` | 创建 Session |
 | GET | `/api/v1/sessions/{id}` | Session 详情 |
 | DELETE | `/api/v1/sessions/{id}` | 删除 Session |
-| GET | `/api/v1/agents` | Agent 列表 |
+| GET | `/api/v1/agents` | Agent 列表（按权限过滤） |
 | POST | `/api/v1/agents/{name}/run` | M2M 鉴权的 Agent 执行 |
-| GET | `/api/v1/tools` | Tool 列表 |
+| GET | `/api/v1/tools` | Tool 列表（按权限过滤） |
 | POST | `/api/v1/tools/{name}/execute` | M2M 鉴权的 Tool 执行 |
+| | **管理面 CRUD**（`management_provider`/`MetadataManager` 提供） | |
+| GET/POST | `/api/v1/management/scenarios` | 场景 CRUD |
+| GET/PUT/DELETE | `/api/v1/management/scenarios/{id}` | 场景详情/更新/删除 |
+| POST/DELETE | `/api/v1/management/scenarios/{id}/agents` | 场景-Agent 关系管理 |
+| POST/DELETE | `/api/v1/management/scenarios/{id}/agents/{name}/tools` | Agent-Tool 关系管理 |
+| GET/POST | `/api/v1/management/agents` | Agent CRUD |
+| GET/PUT/DELETE | `/api/v1/management/agents/{name}` | Agent 详情/更新/删除 |
+| GET/POST | `/api/v1/management/tools` | Tool CRUD |
+| GET/PUT/DELETE | `/api/v1/management/tools/{name}` | Tool 详情/更新/删除 |
+| GET | `/api/v1/management/providers` | LLM Provider 列表 |
+| | **AI 生成**（`ToolGenerator`/`AgentGenerator` 提供） | |
+| POST | `/api/v1/tool-generator/generate` | SSE 流式工具生成 |
+| POST/PUT/DELETE | `/api/v1/tool-generator/tools[/{name}]` | 用户已生成工具 CRUD |
+| POST | `/api/v1/tool-generator/tools/{name}/trial` | 工具试运行（SSE） |
+| POST | `/api/v1/tools/generated/{name}/execute` | M2M 鉴权的生成工具执行 |
+| POST | `/api/v1/agent-generator/generate` | SSE 流式 Agent 生成 |
+| POST/PUT/DELETE | `/api/v1/agent-generator/agents[/{name}]` | 用户已生成 Agent CRUD |
+| POST | `/api/v1/agent-generator/agents/{name}/trial` | Agent 试运行（SSE 流式聊天） |
 
 ---
 
@@ -370,10 +479,12 @@ uvicorn my_app:app --host 0.0.0.0 --port 8005 --workers 4
 
 ## 最佳实践
 
-1. **先实现 RegistryProvider** — 它是核心数据来源，正确后其他部分验证更方便
+1. **先实现 MetadataManager** — 统一读写协议，管理面 API 和运行时 API 共享同一数据源
 2. **所有 Adapter 都用 LifespanHook 注入** — 不要依赖内置默认实现上生产
 3. **Config 类必须继承 pydantic.BaseModel** — ConfigManager 依赖 `model_fields`
 4. **ORCH_TOKEN_SECRET_KEY 必须修改** — 默认仅用于开发
 5. **内置 agent 仅用于演示** — 生产环境 `ORCH_ENABLE_BUILTIN_AGENTS=false`
 6. **SSE 流协议** — Chat API 使用 SSE 流式推送事件，前端监听 `message` 事件
 7. **日志审计** — 审计日志通过 `orchestration.audit` logger（INFO 级别）输出
+8. **LLM 配置通过 ORCH_PROVIDER** — 使用环境变量 `ORCH_PROVIDER_{NAME}__{KEY}` 而不是旧的 `ORCH_LLM_*` 变量
+9. **ToolGenerator/AgentGenerator 共用 llm_provider_factory** — 如果替换了 LLM，自定义生成器需调用 `set_llm_factory()`
