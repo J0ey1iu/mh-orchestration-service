@@ -150,6 +150,7 @@ async def handoff_execute(
             session_id=handoff_session_id,
             agent_name=target_agent_name,
             user_id=user_id,
+            display_name_locale=agent_meta.get("display_name_locale"),
         )
 
         lock = await acquire_session_lock(handoff_session_id)
