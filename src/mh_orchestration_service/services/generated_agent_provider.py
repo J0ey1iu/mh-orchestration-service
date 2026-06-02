@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -46,7 +47,7 @@ class AgentGenerator(Protocol):
     """
 
     def generate_stream(
-        self, natural_description: str
+        self, natural_description: str, stop_event: asyncio.Event | None = None
     ) -> AsyncGenerator[dict[str, Any], None]: ...
 
 
@@ -123,7 +124,7 @@ class DefaultAgentGenerator:
         self._llm_factory = llm_factory
 
     async def generate_stream(
-        self, natural_description: str
+        self, natural_description: str, stop_event: asyncio.Event | None = None
     ) -> AsyncGenerator[dict[str, Any], None]:
         if self._llm_factory is None:
             yield {
@@ -151,7 +152,7 @@ class DefaultAgentGenerator:
         ]
 
         stream = await llm.chat(
-            messages=messages, tools=[], temperature=0.3, max_tokens=4096
+            messages=messages, tools=[], temperature=0.3, max_tokens=4096, stop_event=stop_event
         )
 
         content_parts: list[str] = []

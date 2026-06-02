@@ -183,10 +183,11 @@ class MetadataManager(RegistryProvider, Protocol):
 ```python
 @runtime_checkable
 class ToolGenerator(Protocol):
-    def generate_stream(self, natural_description: str) -> AsyncGenerator[dict[str, Any], None]: ...
+    def generate_stream(self, natural_description: str, stop_event: asyncio.Event | None = None) -> AsyncGenerator[dict[str, Any], None]: ...
 ```
 
 - Yields SSE events: `{"type": "generating", "data": {...}}` → `{"type": "generated", "data": {tool_dict}}`
+- `stop_event`: when set, the implementation should cancel the LLM call as soon as possible
 - Default: `DefaultToolGenerator` (LLM-based, reuses `llm_provider_factory`)
 - Injected via `generated_tool_provider` LifespanHook
 
@@ -195,10 +196,10 @@ class ToolGenerator(Protocol):
 ```python
 @runtime_checkable
 class AgentGenerator(Protocol):
-    def generate_stream(self, natural_description: str) -> AsyncGenerator[dict[str, Any], None]: ...
+    def generate_stream(self, natural_description: str, stop_event: asyncio.Event | None = None) -> AsyncGenerator[dict[str, Any], None]: ...
 ```
 
-- Symmetrical to `ToolGenerator`; same event protocol
+- Symmetrical to `ToolGenerator`; same event protocol and `stop_event` parameter
 - Default: `DefaultAgentGenerator` (LLM-based)
 - Injected via `generated_agent_provider` LifespanHook
 

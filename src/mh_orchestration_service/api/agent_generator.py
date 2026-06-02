@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -60,12 +61,18 @@ async def generate_agent(
         )
 
     async def _stream():
+        stop_event = asyncio.Event()
         try:
-            async for event in generator.generate_stream(body.natural_description):
+            async for event in generator.generate_stream(body.natural_description, stop_event=stop_event):
+                if await request.is_disconnected():
+                    logger.info("agent.generate.disconnect — client disconnected")
+                    stop_event.set()
+                    break
                 yield _sse(event["type"], event["data"])
         except Exception as e:
-            logger.exception("agent.generate.error")
-            yield _sse("error", {"message": str(e)})
+            if not await request.is_disconnected():
+                logger.exception("agent.generate.error")
+                yield _sse("error", {"message": str(e)})
 
     return StreamingResponse(
         _stream(),

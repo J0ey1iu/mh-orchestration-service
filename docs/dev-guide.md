@@ -204,11 +204,12 @@ class VaultSecretResolver(ConfigProvider):
 由自然语言描述生成可执行工具的元数据和源码，适配器由 `app.state.adapters.generated_tool_provider` 注入。
 
 ```python
+import asyncio
 from mh_orchestration_service.services.generated_tool_provider import ToolGenerator
 from collections.abc import AsyncGenerator
 
 class MyToolGenerator(ToolGenerator):
-    def generate_stream(self, natural_description: str) -> AsyncGenerator[dict[str, Any], None]:
+    def generate_stream(self, natural_description: str, stop_event: asyncio.Event | None = None) -> AsyncGenerator[dict[str, Any], None]:
         ...
 ```
 
@@ -222,7 +223,7 @@ class MyToolGenerator(ToolGenerator):
 from mh_orchestration_service.services.generated_agent_provider import AgentGenerator
 
 class MyAgentGenerator(AgentGenerator):
-    def generate_stream(self, natural_description: str) -> AsyncGenerator[dict[str, Any], None]:
+    def generate_stream(self, natural_description: str, stop_event: asyncio.Event | None = None) -> AsyncGenerator[dict[str, Any], None]:
         ...
 ```
 
