@@ -19,11 +19,12 @@ class Test_DefaultAuthProvider:
 
     @pytest.mark.asyncio
     async def test_verify_x_user_id_header(self):
-        request = _mock_request(x_user_id="admin")
+        request = _mock_request(x_user_id="1")
         identity = await self.client.verify(request)
         assert identity is not None
-        assert identity.user_id == "admin"
-        assert identity.username == "admin"
+        assert identity.user_id == "1"
+        assert identity.username == "Admin"
+        assert identity.roles == ["admin"]
 
     @pytest.mark.asyncio
     async def test_verify_missing_header(self):
@@ -35,15 +36,15 @@ class Test_DefaultAuthProvider:
     async def test_verify_x_user_id_cookie(self):
         request = _mock_request(x_user_id="")
         request.cookies.get.side_effect = lambda key: (
-            "admin" if key == "x-user-id" else None
+            "1" if key == "x-user-id" else None
         )
         identity = await self.client.verify(request)
         assert identity is not None
-        assert identity.user_id == "admin"
+        assert identity.user_id == "1"
 
     @pytest.mark.asyncio
     async def test_get_permissions_admin(self):
-        perms = await self.client.get_permissions("admin")
+        perms = await self.client.get_permissions("1")
         assert "use:agent:*" in perms
 
     @pytest.mark.asyncio
@@ -84,24 +85,24 @@ class Test_DefaultAuthProvider:
     @pytest.mark.asyncio
     async def test_scene_manager_has_only_scene_perms(self):
         self.client._permissions = dict(self.client.DEFAULT_PERMISSIONS)
-        assert await self.client.check("scene-manager", "manage:scene:*") is True
-        assert await self.client.check("scene-manager", "manage:agent:*") is False
-        assert await self.client.check("scene-manager", "manage:tool:*") is False
-        assert await self.client.check("scene-manager", "use:scene:*") is False
+        assert await self.client.check("4", "manage:scene:*") is True
+        assert await self.client.check("4", "manage:agent:*") is False
+        assert await self.client.check("4", "manage:tool:*") is False
+        assert await self.client.check("4", "use:scene:*") is False
 
     @pytest.mark.asyncio
     async def test_agent_manager_has_only_agent_perms(self):
         self.client._permissions = dict(self.client.DEFAULT_PERMISSIONS)
-        assert await self.client.check("agent-manager", "manage:agent:*") is True
-        assert await self.client.check("agent-manager", "manage:scene:*") is False
-        assert await self.client.check("agent-manager", "manage:tool:*") is False
+        assert await self.client.check("5", "manage:agent:*") is True
+        assert await self.client.check("5", "manage:scene:*") is False
+        assert await self.client.check("5", "manage:tool:*") is False
 
     @pytest.mark.asyncio
     async def test_tool_manager_has_only_tool_perms(self):
         self.client._permissions = dict(self.client.DEFAULT_PERMISSIONS)
-        assert await self.client.check("tool-manager", "manage:tool:*") is True
-        assert await self.client.check("tool-manager", "manage:scene:*") is False
-        assert await self.client.check("tool-manager", "manage:agent:*") is False
+        assert await self.client.check("6", "manage:tool:*") is True
+        assert await self.client.check("6", "manage:scene:*") is False
+        assert await self.client.check("6", "manage:agent:*") is False
 
 
 class TestRegistryClient:

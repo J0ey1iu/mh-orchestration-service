@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from minimal_harness.database import DatabaseBackend, DatabaseProtocol
 from minimal_harness.memory_store import SessionStoreProtocol
+
+from mh_orchestration_service.database import DatabaseBackend, DatabaseProtocol
 
 _db: DatabaseProtocol | None = None
 _db_type: str = ""

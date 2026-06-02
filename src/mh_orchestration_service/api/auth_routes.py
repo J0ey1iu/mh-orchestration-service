@@ -71,13 +71,13 @@ _DEV_LOGIN_HTML = """\
   <form method="POST">
     <input type="hidden" name="redirect" value="{redirect}">
     <div class="label">User ID</div>
-    <input type="text" name="user_id" value="admin" placeholder="Enter user ID">
-    <button class="btn" type="submit" name="role" value="admin">Login as Admin</button>
-    <button class="btn" type="submit" name="role" value="member">Login as Member</button>
-    <button class="btn" type="submit" name="role" value="user">Login as User</button>
-    <button class="btn" type="submit" name="role" value="scene-manager">Login as Scene Manager</button>
-    <button class="btn" type="submit" name="role" value="agent-manager">Login as Agent Manager</button>
-    <button class="btn" type="submit" name="role" value="tool-manager">Login as Tool Manager</button>
+    <input type="text" name="user_id" value="1" placeholder="Enter user ID">
+    <button class="btn" type="submit" name="role" value="1">Login as Admin</button>
+    <button class="btn" type="submit" name="role" value="2">Login as Member</button>
+    <button class="btn" type="submit" name="role" value="3">Login as User</button>
+    <button class="btn" type="submit" name="role" value="4">Login as Scene Manager</button>
+    <button class="btn" type="submit" name="role" value="5">Login as Agent Manager</button>
+    <button class="btn" type="submit" name="role" value="6">Login as Tool Manager</button>
   </form>
 </div>
 </body>
@@ -112,7 +112,7 @@ async def dev_login_submit(request: Request):
     raw_user_id = form.get("user_id")
     raw_role = form.get("role")
     raw_redirect = form.get("redirect")
-    user_id = str(raw_user_id or raw_role or "admin")
+    user_id = str(raw_user_id or raw_role or "1")
     role = str(raw_role or "") or user_id
     redirect_value = str(raw_redirect or "/")
     uid = user_id if role == user_id else role

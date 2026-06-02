@@ -14,7 +14,7 @@ class _DefaultAuthProvider(UserAuthProvider, PermissionChecker):
     """
 
     DEFAULT_PERMISSIONS: dict[str, list[str]] = {
-        "admin": [
+        "1": [
             "use:agent:*",
             "use:tool:*",
             "use:scene:*",
@@ -23,28 +23,46 @@ class _DefaultAuthProvider(UserAuthProvider, PermissionChecker):
             "manage:agent:*",
             "manage:tool:*",
         ],
-        "member": [
+        "2": [
             "use:agent:triage",
             "use:tool:calculator",
             "use:scene:triage",
             "manage:scene:*",
         ],
-        "user": [
+        "3": [
             "use:agent:code-reviewer",
             "use:agent:writer",
             "use:tool:web_search",
             "use:scene:code_review",
             "use:scene:writing",
         ],
-        "scene-manager": [
+        "4": [
             "manage:scene:*",
         ],
-        "agent-manager": [
+        "5": [
             "manage:agent:*",
         ],
-        "tool-manager": [
+        "6": [
             "manage:tool:*",
         ],
+    }
+
+    USER_NAMES: dict[str, str] = {
+        "1": "Admin",
+        "2": "Member",
+        "3": "User",
+        "4": "Scene Manager",
+        "5": "Agent Manager",
+        "6": "Tool Manager",
+    }
+
+    ROLE_NAMES: dict[str, str] = {
+        "1": "admin",
+        "2": "member",
+        "3": "user",
+        "4": "scene-manager",
+        "5": "agent-manager",
+        "6": "tool-manager",
     }
 
     def __init__(
@@ -64,7 +82,11 @@ class _DefaultAuthProvider(UserAuthProvider, PermissionChecker):
         uid = request.headers.get("X-User-Id") or request.cookies.get("x-user-id")
         if not uid:
             return None
-        return UserIdentity(user_id=uid, username=uid)
+        return UserIdentity(
+            user_id=uid,
+            username=self.USER_NAMES.get(uid, uid),
+            roles=[self.ROLE_NAMES.get(uid, uid)],
+        )
 
     async def get_permissions(self, user_id: str) -> list[str]:
         return self._permissions.get(user_id, [])
