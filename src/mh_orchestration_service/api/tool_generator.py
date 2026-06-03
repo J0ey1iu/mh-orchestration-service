@@ -65,7 +65,9 @@ async def generate_tool(
     async def _stream():
         stop_event = asyncio.Event()
         try:
-            async for event in generator.generate_stream(body.natural_description, stop_event=stop_event):
+            async for event in generator.generate_stream(
+                body.natural_description, stop_event=stop_event
+            ):
                 if await request.is_disconnected():
                     logger.info("tool.generate.disconnect — client disconnected")
                     stop_event.set()

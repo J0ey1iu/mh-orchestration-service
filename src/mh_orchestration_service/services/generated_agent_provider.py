@@ -152,7 +152,11 @@ class DefaultAgentGenerator:
         ]
 
         stream = await llm.chat(
-            messages=messages, tools=[], temperature=0.3, max_tokens=4096, stop_event=stop_event
+            messages=messages,
+            tools=[],
+            temperature=0.3,
+            max_tokens=4096,
+            stop_event=stop_event,
         )
 
         content_parts: list[str] = []
