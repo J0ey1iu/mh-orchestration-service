@@ -113,11 +113,36 @@ adapters.logger.info("Custom logger in use")  # 仅当注入了 Logger
 | `/api/v1/sessions/{id}` | DELETE | 删除 Session |
 | `/api/v1/agents` | GET | Agent 列表（按权限过滤） |
 | `/api/v1/tools` | GET | Tool 列表（按权限过滤） |
+| `/health` | GET | 健康检查（始终返回 `{"status":"ok"}`） |
+| `/ready` | GET | 就绪检查（始终返回 `{"status":"ready"}`） |
+| `/api/v1/metrics` | GET | 运行时指标快照（仅 `metrics_enabled=true` 时注册） |
 
 ## AuditMiddleware
 
 每个 Agent 执行周期自动记录审计日志（包括 `agent_start/end`、`llm_start/end`、`tool_start/end/error`、token 用量）。
 日志级别为 `INFO`，可通过 `orchestration.audit` logger 配置。
+
+## AccessLogMiddleware
+
+每个 HTTP 请求自动输出一条结构化 JSON 访问日志，包含 `method`、`path`、`status`、`duration_ms`、`trace_id`、`user_id` 等字段。
+日志级别为 `INFO`，可通过 `orchestration.access` logger 配置。
+
+## 监控指标
+
+当 `metrics_enabled=true` 时，服务会自动注册 `MetricsCollector`，在内存中采集如下指标并通过后台定时任务推送到日志：
+
+| 指标 | 类型 | 标签 |
+|------|------|------|
+| `http_requests_total` | Counter | method, path, status |
+| `http_request_duration_ms` | Histogram | method, path |
+| `llm_requests_total` | Counter | provider, model, status |
+| `llm_tokens_total` | Counter | provider, model, type (prompt/completion) |
+| `llm_request_duration_ms` | Histogram | provider, model |
+| `agent_runs_total` | Counter | agent_id, status |
+| `tool_calls_total` | Counter | tool_name, status |
+| `sessions_active` | Gauge | — |
+
+指标通过 AuditMiddleware 的生命周期钩子自动采集。可通过 `/api/v1/metrics` 获取实时快照。
 
 ## PermissionMiddleware
 
@@ -140,6 +165,8 @@ adapters.logger.info("Custom logger in use")  # 仅当注入了 Logger
 | `ORCH_LLM_API_KEY` | `` | LLM API Key |
 | `ORCH_LLM_BASE_URL` | `` | LLM 接口地址（如 `https://api.openai.com/v1`） |
 | `ORCH_LLM_MODEL` | `` | LLM 模型名 |
+| `ORCH_METRICS_ENABLED` | `false` | 启用指标采集（计数器/直方图/仪表盘）及 `/api/v1/metrics` 端点 |
+| `ORCH_METRICS_PUSH_INTERVAL` | `60` | 指标推送间隔（秒），仅 `ORCH_METRICS_ENABLED=true` 时生效 |
 | `ORCH_ENABLE_BUILTIN_AGENTS` | `false` | 开箱即用演示开关，开启后暴露内置 agent（triage/code-reviewer/writer） |
 | `ORCH_ENABLE_FRONTEND` | `false` | 内置前端 UI 开关，开启后 FastAPI 在 `/` 直接 serve 编译后的 SPA |
 
