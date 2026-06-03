@@ -107,13 +107,7 @@ class ConfigProvider(Protocol):
 ```python
 class ConfigSchema(BaseModel):
     token_secret_key: str                     # REQUIRED — JWT signing secret
-    db_type: str                              # REQUIRED — "sqlite" | "opengauss"
-    db_path: str                              # REQUIRED — SQLite file path
-    db_host: str = ""                         # OpenGauss host
-    db_port: int = 5432                       # Database port
-    db_name: str = ""                         # Database name
-    db_user: str = ""                         # Database user
-    db_password: str = ""                     # Database password (sensitive)
+    db_path: str = "./sessions.db"             # SQLite file path
     db_auto_schema: bool = False              # Auto-create tables
     cors_origins: list[str] = Field(default_factory=list)
     llm_api_key: str = ""
@@ -282,9 +276,21 @@ app = create_app(
 
 - On module import, `asyncio.run()` resolves config
 - `create_app()` sets up FastAPI with CORS, routers, middleware
-- On server startup (lifespan): `init_db(settings.database_url, db_type=settings.db_type, auto_schema=settings.db_auto_schema)`
+- On server startup (lifespan): `init_db(settings.database_url, auto_schema=settings.db_auto_schema)`
 - On server shutdown: close auth providers, credential verifier, registry client, database connection
-- **Required fields missing → `ConfigError` raised → process exits with error message listing missing keys**
+- **Required fields missing → `ConfigError` raised → process exits with error message listing missing keys`
+
+### Custom Database (Adapter)
+
+Built-in SQLite only. For PostgreSQL/MySQL etc., implement `SessionStoreProtocol` and inject:
+
+```python
+from mh_orchestration_service.services import database as db_svc
+
+db_svc.set_session_store_factory(lambda: MySessionStore(my_db_conn))
+```
+
+The factory accepts sync or async callables. See `mh_orchestration_service.database.BuiltinSessionStore` for reference, or [customer-adaptation-guide.md](customer-adaptation-guide.md) for a full PostgreSQL asyncpg example.
 
 ---
 

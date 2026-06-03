@@ -55,7 +55,6 @@ ALL_PERMS = [
 @pytest.fixture
 def test_app(tmp_path):
     settings = ConfigSchema(
-        db_type="sqlite",
         db_path=str(tmp_path / "test.db"),
         cors_origins=[],
     )

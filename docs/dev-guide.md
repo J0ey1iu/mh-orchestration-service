@@ -311,8 +311,8 @@ config_mgr = ConfigManager(
 )
 
 mapping = ConfigMapping(
-    key_mapping={"db_password": "woa.orchestration.db.pw"},
-    sensitive_keys={"db_password"},
+    key_mapping={},
+    sensitive_keys=set(),
 )
 
 
@@ -411,13 +411,7 @@ uvicorn my_app:app --host 0.0.0.0 --port 8005 --workers 4
 
 | 字段 | 环境变量 | 必填 | 说明 |
 |------|---------|------|------|
-| `db_type` | `ORCH_DB_TYPE` | 是 | `sqlite` 或 `opengauss` |
-| `db_path` | `ORCH_DB_PATH` | 是 | SQLite 文件路径；openGauss 模式下为连接 URL |
-| `db_host` | `ORCH_DB_HOST` | 否 | openGauss 主机 |
-| `db_port` | `ORCH_DB_PORT` | 否 | 默认 5432 |
-| `db_name` | `ORCH_DB_NAME` | 否 | 数据库名 |
-| `db_user` | `ORCH_DB_USER` | 否 | 数据库用户 |
-| `db_password` | `ORCH_DB_PASSWORD` | 否 | 敏感字段 |
+| `db_path` | `ORCH_DB_PATH` | 否 | SQLite 数据库文件路径（默认 `./sessions.db`） |
 | `db_auto_schema` | `ORCH_DB_AUTO_SCHEMA` | 否 | 默认 false，自动建表 |
 | `cors_origins` | `ORCH_CORS_ORIGINS` | 否 | JSON 数组格式 |
 | `enable_builtin_agents` | `ORCH_ENABLE_BUILTIN_AGENTS` | 否 | 默认 false |
@@ -469,12 +463,38 @@ uvicorn my_app:app --host 0.0.0.0 --port 8005 --workers 4
 
 ## 数据库
 
-- SQLite（开发）: `ORCH_DB_TYPE=sqlite`
-- openGauss（生产）: `ORCH_DB_TYPE=opengauss`
+内置 SQLite 实现。通过设置 `ORCH_DB_PATH` 指定文件路径，默认 `./sessions.db`。
 
-所有表包含统一审计字段：`created_by`, `last_updated_by`, `creation_date`, `last_update_date`, `delete_flag`(N/Y), `last_update_trace_id`。
+### Adapter 模式
 
-`ORCH_DB_AUTO_SCHEMA` 控制是否自动建表，生产环境可设为 `false` 由 DBA 管理。
+框架只定义 `SessionStoreProtocol` 作为内部流转结构，数据库实现由客户通过 adapter 注入：
+
+```python
+from mh_orchestration_service.services import database as db_svc
+
+db_svc.set_session_store_factory(lambda: MySessionStore(my_db_conn))
+```
+
+工厂接受同步或异步 callable。不注入时默认使用 `BuiltinSessionStore` + `SqliteDatabase`。
+
+`SessionStoreProtocol` 完整方法（定义在 `minimal_harness.memory_store`）：
+
+| 方法 | 说明 |
+|------|------|
+| `create_session(session_id, agent_name, user_id, scenario_id, transient, display_name_locale) -> Session` | 创建新 Session |
+| `get_session(session_id) -> Session \| None` | 获取 Session（含消息历史） |
+| `save_memory(memory, session_id, extra) -> None` | 持久化新消息 |
+| `delete_session(session_id) -> bool` | 软删除 Session |
+| `list_sessions() -> list[SessionSummary]` | 全部 Session 列表 |
+| `list_user_sessions(user_id, scenario_id) -> list[SessionSummary]` | 按用户过滤 |
+| `get_session_messages(session_id) -> list[dict]` | 获取消息原始数据 |
+| `get_messages_as_items(session) -> list[dict]` | 转换为展示格式 |
+
+参考实现见 `mh_orchestration_service.database.BuiltinSessionStore`，完整 PostgreSQL 示例见 [customer-adaptation-guide.md](customer-adaptation-guide.md)。
+
+内置表的审计字段：`created_by`, `last_updated_by`, `creation_date`, `last_update_date`, `delete_flag`(N/Y), `last_update_trace_id`。
+
+`ORCH_DB_AUTO_SCHEMA` 控制是否自动建表，生产环境推荐由 DBA 管理。
 
 ---
 

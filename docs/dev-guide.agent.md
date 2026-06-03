@@ -311,9 +311,9 @@ Both `config_provider` and `secret_resolver` use the same `ConfigProvider` proto
 
 ### 4.2 ConfigSchema (`from mh_orchestration_service import ConfigSchema`)
 
-Required fields (no defaults): `db_type`, `db_path`
+Required fields (no defaults): none (all fields have defaults)
 
-Optional fields: `db_host`, `db_port`, `db_name`, `db_user`, `db_password`, `db_auto_schema`, `cors_origins`, `enable_builtin_agents`, `dev_mode`, `enable_eval`, `eval_results_dir`, `log_level`
+Optional fields: `db_auto_schema`, `cors_origins`, `enable_builtin_agents`, `dev_mode`, `enable_eval`, `eval_results_dir`, `log_level`
 
 > **Note:** `llm_api_key`, `llm_base_url`, `llm_model` were removed from `ConfigSchema`. LLM configuration is now handled by `LLMProviderRegistry` with per-provider defaults via env vars `ORCH_PROVIDER_{NAME}__{KEY}` (e.g. `ORCH_PROVIDER_OPENAI__API_KEY=sk-xxx`).
 
@@ -412,11 +412,18 @@ event: done\ndata: {}\n\n
 
 ## 9. Database
 
-- `init_db()` called in lifespan with `settings.database_url` and `settings.db_type`
-- Backend selection: `DatabaseBackend.get(db_type)` — built-in: `sqlite` via `aiosqlite`, `opengauss` via `async-gaussdb`
+- `init_db()` called in lifespan with `settings.database_url` and `settings.db_auto_schema`
+- Built-in SQLite via `aiosqlite`. Custom backends via `set_session_store_factory()`:
+
+  ```python
+  from mh_orchestration_service.services import database as db_svc
+  db_svc.set_session_store_factory(lambda: MySessionStore(my_db_conn))
+  ```
+
 - `db_auto_schema=False` (default) — set to `True` to call `init_schema()` automatically
 - All tables have audit columns: `created_by`, `last_updated_by`, `creation_date`, `last_update_date`, `delete_flag` (N/Y), `last_update_trace_id`
 - Primary keys are snowflake-like BIGINTs, not auto-increment
+- Full PostgreSQL example in [customer-adaptation-guide.md](customer-adaptation-guide.md)
 
 ---
 

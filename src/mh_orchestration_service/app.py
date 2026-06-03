@@ -289,7 +289,6 @@ def create_app(
 
             await init_db(
                 settings.database_url,
-                db_type=settings.db_type,
                 auto_schema=settings.db_auto_schema,
             )
             yield

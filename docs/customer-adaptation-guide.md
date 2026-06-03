@@ -467,13 +467,7 @@ settings = await config_mgr.resolve(ConfigSchema, prefix="ORCH")
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `db_type` | str | 是 | 数据库类型 (`sqlite` / `opengauss`) |
-| `db_path` | str | 是 | SQLite 文件路径 |
-| `db_host` | str | 否 | openGauss 主机 |
-| `db_port` | int | 否 | 数据库端口 (默认 5432) |
-| `db_name` | str | 否 | 数据库名 |
-| `db_user` | str | 否 | 数据库用户 |
-| `db_password` | str | 否 | 数据库密码（敏感） |
+| `db_path` | str | 否 | SQLite 数据库文件路径（默认 `./sessions.db`） |
 | `db_auto_schema` | bool | 否 | 自动建表 (默认 false) |
 | `cors_origins` | list[str] | 否 | 跨域来源 |
 | `llm_api_key` | str | 否 | LLM API Key（敏感） |
@@ -523,7 +517,6 @@ async def my_auth_hook(app: FastAPI):
 
 settings = ConfigSchema(
     token_secret_key="dev-secret",
-    db_type="sqlite",
     db_path="./test.db",
 )
 app = create_app(settings=settings, lifespan_hooks=[my_auth_hook])
@@ -550,7 +543,6 @@ async def my_registry_provider(app: FastAPI):
 
 settings = ConfigSchema(
     token_secret_key="dev-secret",
-    db_type="sqlite",
     db_path="./test.db",
 )
 app = create_app(settings=settings, registry_provider=my_registry_provider)
@@ -706,13 +698,7 @@ uvicorn my_app:app \
 
 | 变量 | 说明 | 必填 |
 |------|------|------|
-| `ORCH_DB_TYPE` | 数据库类型：`sqlite` 或 `opengauss` | 是 |
-| `ORCH_DB_PATH` | SQLite 路径 | 是 |
-| `ORCH_DB_HOST` | openGauss/PostgreSQL 主机 | 否 |
-| `ORCH_DB_PORT` | openGauss/PostgreSQL 端口 (默认 5432) | 否 |
-| `ORCH_DB_NAME` | openGauss/PostgreSQL 数据库名 | 否 |
-| `ORCH_DB_USER` | openGauss/PostgreSQL 用户名 | 否 |
-| `ORCH_DB_PASSWORD` | openGauss/PostgreSQL 密码 | 否 |
+| `ORCH_DB_PATH` | SQLite 路径（默认 `./sessions.db`） | 否 |
 | `ORCH_DB_AUTO_SCHEMA` | 启动时自动建表 (默认 false) | 否 |
 | `ORCH_CORS_ORIGINS` | 跨域来源 | 否 |
 | `ORCH_LLM_API_KEY` | LLM API Key | 否 |
@@ -724,15 +710,465 @@ uvicorn my_app:app \
 
 ## 数据库
 
-### SQLite（开发/轻量）
+### 架构：两层 Adapter
 
-设置 `ORCH_DB_TYPE=sqlite`，系统自动在 `ORCH_DB_PATH` 位置创建数据库文件。
+```
+┌──────────────────────────────────────┐
+│  SessionStoreProtocol                │  ← 内部流转结构（框架依赖的接口）
+│  create_session / get_session / ...  │
+└──────────────────────────────────────┘
+         ▲                       ▲
+         │ 实现                   │ 实现
+┌────────┴────────┐    ┌────────┴──────────┐
+│ BuiltinSession  │    │ MySessionStore    │  ← 客户自定义
+│ Store (SQLite)  │    │ (PostgreSQL 等)    │
+└────────┬────────┘    └────────┬──────────┘
+         │ 依赖                  │ 依赖
+┌────────┴────────┐    ┌────────┴──────────┐
+│  SqliteDatabase │    │  MyDatabase       │  ← DatabaseProtocol 实现
+│  (aiosqlite)    │    │  (asyncpg 等)      │
+└─────────────────┘    └───────────────────┘
+```
 
-### openGauss（生产推荐）
+- **`DatabaseProtocol`** — 低级异步数据库接口：`execute`、`fetch_one`、`fetch_all`、事务等
+- **`SessionStoreProtocol`** — 高级 Session/消息 CRUD，框架只依赖这一层
 
-设置 `ORCH_DB_TYPE=opengauss`，需要确保 `async-gaussdb` 已安装（已包含在依赖中）。
+两部分都可以替换。最简情况下只需替换 `SessionStoreProtocol`。
 
-系统启动时会自动建表，包含统一的审计字段：
+### SQLite（内置）
+
+设置 `ORCH_DB_PATH` 指定数据库文件路径，默认 `./sessions.db`。系统启动时自动创建。
+
+### `SessionStoreProtocol` 完整接口
+
+```python
+from minimal_harness.memory_store import SessionStoreProtocol
+from minimal_harness.memory import Memory
+from minimal_harness.session import Session, SessionSummary
+
+class SessionStoreProtocol(Protocol):
+    async def create_session(
+        self,
+        session_id: str | None = None,
+        agent_name: str = "",
+        user_id: str = "",
+        scenario_id: str | None = None,
+        transient: bool = False,
+        display_name_locale: str | None = None,
+    ) -> Session: ...
+
+    async def get_session(self, session_id: str) -> Session | None: ...
+
+    async def save_memory(
+        self, memory: Memory, session_id: str,
+        extra: dict[str, Any] | None = None
+    ) -> None: ...
+
+    async def delete_session(self, session_id: str) -> bool: ...
+
+    async def list_sessions(self) -> list[SessionSummary]: ...
+
+    async def list_user_sessions(
+        self, user_id: str, scenario_id: str | None = None
+    ) -> list[SessionSummary]: ...
+
+    async def get_session_messages(self, session_id: str) -> list[dict]: ...
+
+    def get_messages_as_items(
+        self, session: Session
+    ) -> list[dict]: ...
+```
+
+### 注入方式
+
+```python
+from mh_orchestration_service.services import database as db_svc
+
+db_svc.set_session_store_factory(lambda: MySessionStore(my_db_conn))
+```
+
+工厂接受同步或异步 callable（`Callable[[], SessionStoreProtocol]` 或 `Callable[[], Awaitable[SessionStoreProtocol]]`）。
+
+### PostgreSQL 示例（asyncpg）
+
+完整的 PostgreSQL adapter 示例，包含 `DatabaseProtocol` 和 `SessionStoreProtocol` 两层：
+
+```python
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from typing import Any, cast
+from uuid import uuid4
+
+import asyncpg
+
+from minimal_harness.database import generate_bigint_id
+from minimal_harness.memory import Memory, Message
+from minimal_harness.memory_store import SessionStoreProtocol
+from minimal_harness.session import Session, SessionSummary, SimpleSession
+
+SYSTEM_USER_ID = 0
+
+
+def _ts_ms() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+# ── DatabaseProtocol 实现 ─────────────────────────────────
+
+class PostgresDatabase:
+    def __init__(self) -> None:
+        self._pool: asyncpg.Pool | None = None
+
+    async def init(self, dsn: str) -> None:
+        self._pool = await asyncpg.create_pool(dsn)
+
+    async def close(self) -> None:
+        if self._pool:
+            await self._pool.close()
+
+    async def execute(self, sql: str, params: list | None = None) -> Any:
+        async with self._pool.acquire() as conn:
+            return await conn.execute(sql, *(params or []))
+
+    async def execute_write(self, sql: str, params: list | None = None) -> int:
+        status = await self.execute(sql, params)
+        return int(status.split()[-1]) if " " in status else 0
+
+    async def execute_many_write(
+        self, sql: str, params_list: list[list]
+    ) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.executemany(sql, params_list)
+
+    async def fetch_one(
+        self, sql: str, params: list | None = None
+    ) -> dict | None:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(sql, *(params or []))
+            return dict(row) if row else None
+
+    async def fetch_all(
+        self, sql: str, params: list | None = None
+    ) -> list[dict]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(sql, *(params or []))
+            return [dict(r) for r in rows]
+
+    async def begin(self) -> None:
+        pass  # asyncpg 自动使用事务块
+
+    async def commit(self) -> None:
+        pass
+
+    async def rollback(self) -> None:
+        pass
+
+    async def executemany(self, sql: str, params_list: list[list]) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.executemany(sql, params_list)
+
+    @staticmethod
+    def _convert(sql: str) -> str:
+        i = 0
+        buf: list[str] = []
+        for ch in sql:
+            if ch == "?":
+                i += 1
+                buf.append(f"${i}")
+            else:
+                buf.append(ch)
+        return "".join(buf)
+
+
+# ── SessionStoreProtocol 实现 ────────────────────────────
+
+class PostgresSessionStore:
+    def __init__(self, db: PostgresDatabase) -> None:
+        self._db = db
+        self._cache: dict[str, SimpleSession] = {}
+        self._convert = db._convert
+
+    async def create_session(
+        self,
+        session_id: str | None = None,
+        agent_name: str = "",
+        user_id: str = "",
+        scenario_id: str | None = None,
+        transient: bool = False,
+        display_name_locale: str | None = None,
+    ) -> SimpleSession:
+        sid = session_id or f"mem_{uuid4().hex[:12]}"
+        now = _ts_ms()
+        trace_id = uuid4().hex
+        audit_user_id = int(user_id)
+
+        session = SimpleSession(
+            session_id=sid, agent_name=agent_name,
+            user_id=user_id, scenario_id=scenario_id,
+            display_name_locale=display_name_locale,
+        )
+
+        sql = self._convert(
+            """INSERT INTO sessions
+               (id, session_id, user_id, agent_name, scenario_id, status,
+                created_by, last_updated_by, creation_date, last_update_date,
+                delete_flag, last_update_trace_id, transient,
+                agent_display_name_locale)
+               VALUES (?, ?, ?, ?, ?, 'idle',
+                       ?, ?, ?, ?,
+                       'N', ?, ?, ?)"""
+        )
+        await self._db.execute(sql, [
+            session.db_id, sid, user_id, agent_name,
+            scenario_id or "", audit_user_id, audit_user_id,
+            now, now, trace_id,
+            "Y" if transient else "N", display_name_locale or "",
+        ])
+        session.created_at = now
+        self._cache[sid] = session
+        return session
+
+    async def get_session(self, session_id: str) -> SimpleSession | None:
+        if session_id in self._cache:
+            return self._cache[session_id]
+        sql = self._convert(
+            "SELECT * FROM sessions WHERE session_id = ? AND delete_flag = 'N'"
+        )
+        row = await self._db.fetch_one(sql, [session_id])
+        if row is None:
+            return None
+        session = SimpleSession(
+            session_id=row["session_id"], agent_name=row["agent_name"],
+            user_id=row["user_id"], scenario_id=row["scenario_id"],
+            display_name_locale=row.get("agent_display_name_locale"),
+        )
+        session.db_id = row["id"]
+        session.created_at = row["creation_date"]
+        session.title = row.get("title")
+
+        sql = self._convert(
+            "SELECT data FROM session_messages "
+            "WHERE session_id = ? AND delete_flag = 'N' "
+            "ORDER BY sort_order, id"
+        )
+        msg_rows = await self._db.fetch_all(sql, [session_id])
+        for m in msg_rows:
+            msg_data = json.loads(m["data"])
+            if isinstance(msg_data, dict):
+                await session.add_message(cast("Message", msg_data))
+        session.memory.set_persisted_count(len(msg_rows))
+        self._cache[session_id] = session
+        return session
+
+    async def save_memory(
+        self, memory: Memory, session_id: str,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        now = _ts_ms()
+        trace_id = uuid4().hex
+        new_msgs = memory.get_new_messages()
+        title = (extra or {}).get("title")
+        if not new_msgs and not title:
+            return
+
+        sql = self._convert(
+            "SELECT user_id, created_by FROM sessions "
+            "WHERE session_id = ? AND delete_flag = 'N'"
+        )
+        session_row = await self._db.fetch_one(sql, [session_id])
+        audit_id = (
+            session_row["created_by"] if session_row else SYSTEM_USER_ID
+        )
+        base_order = memory.get_persisted_count()
+
+        await self._db.begin()
+        try:
+            if new_msgs:
+                rows = []
+                for idx, m in enumerate(new_msgs):
+                    mid = generate_bigint_id()
+                    rows.append([
+                        mid, session_id,
+                        json.dumps(m, ensure_ascii=False),
+                        base_order + idx, audit_id, audit_id,
+                        now, now, "N", trace_id,
+                    ])
+                insert_sql = self._convert(
+                    """INSERT INTO session_messages
+                       (id, session_id, data, sort_order,
+                        created_by, last_updated_by,
+                        creation_date, last_update_date,
+                        delete_flag, last_update_trace_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                )
+                await self._db.executemany(insert_sql, rows)
+
+            if title:
+                update_sql = self._convert(
+                    "UPDATE sessions SET title = ?, last_updated_by = ?, "
+                    "last_update_date = ?, status = 'idle', "
+                    "last_update_trace_id = ? WHERE session_id = ?"
+                )
+                await self._db.execute(
+                    update_sql,
+                    [title, audit_id, now, trace_id, session_id],
+                )
+            else:
+                update_sql = self._convert(
+                    "UPDATE sessions SET last_updated_by = ?, "
+                    "last_update_date = ?, status = 'idle', "
+                    "last_update_trace_id = ? WHERE session_id = ?"
+                )
+                await self._db.execute(
+                    update_sql,
+                    [audit_id, now, trace_id, session_id],
+                )
+            await self._db.commit()
+        except Exception:
+            await self._db.rollback()
+            raise
+
+        if new_msgs:
+            memory.mark_all_persisted()
+
+    async def delete_session(self, session_id: str) -> bool:
+        self._cache.pop(session_id, None)
+        now = _ts_ms()
+        trace_id = uuid4().hex
+
+        sql = self._convert(
+            "UPDATE session_messages SET delete_flag = 'Y', "
+            "last_updated_by = ?, last_update_date = ?, "
+            "last_update_trace_id = ? WHERE session_id = ?"
+        )
+        await self._db.execute_write(
+            sql, [SYSTEM_USER_ID, now, trace_id, session_id]
+        )
+        sql = self._convert(
+            "UPDATE sessions SET delete_flag = 'Y', "
+            "last_updated_by = ?, last_update_date = ?, "
+            "last_update_trace_id = ?, status = 'deleted' "
+            "WHERE session_id = ? AND delete_flag = 'N'"
+        )
+        cur = await self._db.execute(
+            sql, [SYSTEM_USER_ID, now, trace_id, session_id]
+        )
+        return cur.rowcount > 0 if hasattr(cur, 'rowcount') else True
+
+    async def list_sessions(self) -> list[SessionSummary]:
+        sql = self._convert(
+            """SELECT s.session_id, s.agent_name, s.user_id,
+                      s.scenario_id, s.title, s.creation_date,
+                      s.status, s.agent_display_name_locale,
+                      (SELECT COUNT(*) FROM session_messages m
+                       WHERE m.session_id = s.session_id
+                       AND m.delete_flag = 'N') AS message_count
+               FROM sessions s
+               WHERE s.delete_flag = 'N' AND s.transient = 'N'
+               ORDER BY s.creation_date DESC"""
+        )
+        rows = await self._db.fetch_all(sql)
+        return [
+            SessionSummary(
+                session_id=r["session_id"], agent_name=r["agent_name"],
+                user_id=r["user_id"], scenario_id=r["scenario_id"],
+                title=r.get("title"), created_at=r["creation_date"],
+                message_count=r["message_count"], status=r["status"],
+                display_name_locale=r.get("agent_display_name_locale"),
+            )
+            for r in rows
+        ]
+
+    async def list_user_sessions(
+        self, user_id: str, scenario_id: str | None = None
+    ) -> list[SessionSummary]:
+        if scenario_id:
+            sql = self._convert(
+                """SELECT ... FROM sessions s
+                   WHERE s.user_id = ? AND s.scenario_id = ?
+                   AND s.delete_flag = 'N' AND s.transient = 'N'
+                   ORDER BY s.creation_date DESC"""
+            )
+            rows = await self._db.fetch_all(sql, [user_id, scenario_id])
+        else:
+            sql = self._convert(
+                """SELECT ... FROM sessions s
+                   WHERE s.user_id = ? AND s.delete_flag = 'N'
+                   AND s.transient = 'N'
+                   ORDER BY s.creation_date DESC"""
+            )
+            rows = await self._db.fetch_all(sql, [user_id])
+        return [
+            SessionSummary(
+                session_id=r["session_id"], agent_name=r["agent_name"],
+                user_id=r["user_id"], scenario_id=r["scenario_id"],
+                title=r.get("title"), created_at=r["creation_date"],
+                message_count=r["message_count"], status=r["status"],
+                display_name_locale=r.get("agent_display_name_locale"),
+            )
+            for r in rows
+        ]
+
+    async def get_session_messages(self, session_id: str) -> list[dict]:
+        sql = self._convert(
+            "SELECT data FROM session_messages "
+            "WHERE session_id = ? AND delete_flag = 'N' "
+            "ORDER BY sort_order, id"
+        )
+        rows = await self._db.fetch_all(sql, [session_id])
+        return [json.loads(r["data"]) for r in rows]
+
+    def get_messages_as_items(self, session: Session) -> list[dict]:
+        items: list[dict] = []
+        for i, msg in enumerate(session.get_all_messages()):
+            content = msg.get("content")
+            if isinstance(content, list):
+                content = "\n".join(
+                    p.get("text", "")
+                    for p in content
+                    if isinstance(p, dict) and p.get("type") == "text"
+                )
+            elif not isinstance(content, str) and content is not None:
+                content = json.dumps(content, ensure_ascii=False)
+            items.append({
+                "id": f"msg-{i}", "role": msg.get("role", ""),
+                "content": content,
+                "tool_calls": msg.get("tool_calls"),
+                "tool_call_id": msg.get("tool_call_id"),
+                "progress": msg.get("progress"),
+                "meta": msg.get("meta"),
+            })
+        return items
+
+
+# ── 注入 ────────────────────────────────────────────────
+
+async def main():
+    from mh_orchestration_service.services import database as db_svc
+
+    db = PostgresDatabase()
+    await db.init("postgresql://user:pass@host:5432/mydb")
+    db_svc.set_db(db)
+    db_svc.set_session_store_factory(lambda: PostgresSessionStore(db))
+```
+
+**关键点：**
+- `DatabaseProtocol` 的 `execute`/`fetch_one` 等方法可以支持 `?` 占位符（在实现中转换为 `$1`），这样 `SessionStore` 中的 SQL 可以复用内置实现的写法
+- 表结构可以自定义，只需在 `SessionStoreProtocol` 各方法中映射到内部流转结构（`SimpleSession` / `SessionSummary` / `Memory`）
+- 工厂可以传同步 `lambda` 或异步 `async def`，`get_session_store()` 两者都接受
+
+### Session / Message 内部类型
+
+| 类型 | 来源 | 说明 |
+|------|------|------|
+| `SimpleSession` | `minimal_harness.session` | 具体 Session 实现，含 `db_id`、`memory`、`add_message()` 等 |
+| `SessionSummary` | `minimal_harness.session` | 轻量摘要（TypedDict）：`session_id`、`agent_name`、`title`、`created_at`、`message_count`、`status` 等 |
+| `Memory` | `minimal_harness.memory` | 消息内存协议，有 `get_new_messages()`、`mark_all_persisted()` 等持久化追踪方法 |
+| `Message` | `minimal_harness.memory` | 消息联合类型 `SystemMessage \| UserMessage \| AssistantMessage \| ToolMessage \| ReasoningMessage` |
+
+内置表的审计字段：
 
 | 审计字段 | 类型 | 说明 |
 |---------|------|------|

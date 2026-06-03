@@ -1,15 +1,30 @@
 from __future__ import annotations
 
+import inspect
+from collections.abc import Awaitable, Callable
+
 from minimal_harness.memory_store import SessionStoreProtocol
 
-from mh_orchestration_service.database import DatabaseBackend, DatabaseProtocol
+from mh_orchestration_service.database import (
+    BuiltinSessionStore,
+    DatabaseProtocol,
+    SqliteDatabase,
+)
 
 _db: DatabaseProtocol | None = None
-_db_type: str = ""
+_session_store_factory: (
+    Callable[[], Awaitable[SessionStoreProtocol]]
+    | Callable[[], SessionStoreProtocol]
+    | None
+) = None
+
+
+def set_db(provider: DatabaseProtocol) -> None:
+    global _db
+    _db = provider
 
 
 def get_db() -> DatabaseProtocol:
-    global _db
     if _db is None:
         raise RuntimeError(
             "Database not initialized. Did you call init_db() in lifespan?"
@@ -17,26 +32,29 @@ def get_db() -> DatabaseProtocol:
     return _db
 
 
-def get_db_type() -> str:
-    return _db_type
-
-
-def set_db(provider: DatabaseProtocol, db_type: str = "") -> None:
-    global _db, _db_type
-    _db = provider
-    _db_type = db_type
-
-
-async def init_db(dsn: str, db_type: str, auto_schema: bool = True) -> None:
-    global _db_type
-    _db_type = db_type
-    backend_cls = DatabaseBackend.get(db_type)
-    d = backend_cls()  # type: ignore[return-value]
-    set_db(d, db_type)
-    await d.init(dsn)
-    if auto_schema:
-        await d.init_schema()
+def set_session_store_factory(
+    factory: (
+        Callable[[], Awaitable[SessionStoreProtocol]]
+        | Callable[[], SessionStoreProtocol]
+    ),
+) -> None:
+    global _session_store_factory
+    _session_store_factory = factory
 
 
 async def get_session_store() -> SessionStoreProtocol:
-    return await get_db().create_session_store()
+    if _session_store_factory is not None:
+        result = _session_store_factory()
+        if inspect.isawaitable(result):
+            return await result
+        return result
+    return BuiltinSessionStore(get_db())
+
+
+async def init_db(dsn: str, auto_schema: bool = True) -> None:
+    d = SqliteDatabase()
+    set_db(d)
+    await d.init(dsn)
+    if auto_schema:
+        store = BuiltinSessionStore(d)
+        await store.init_schema()
