@@ -15,7 +15,7 @@ from mh_orchestration_service.api.dependencies import (
     get_current_user,
 )
 from mh_orchestration_service.eval.runner import run_scenario_eval
-from mh_orchestration_service.eval.types import EvalJob, EvalJobConfig, EvalInput
+from mh_orchestration_service.eval.types import EvalInput, EvalJob, EvalJobConfig
 
 logger = logging.getLogger("orchestration.eval")
 

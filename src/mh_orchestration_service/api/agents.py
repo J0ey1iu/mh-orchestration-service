@@ -7,10 +7,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from minimal_harness.agent.factory import DefaultAgentFactory
 from minimal_harness.auth import match_permission
+from minimal_harness.llm import LLMProvider
 from minimal_harness.memory import ConversationMemory
 from minimal_harness.sse_serialization import serialize_event
 from minimal_harness.tool.factory import DefaultToolFactory
-from minimal_harness.llm import LLMProvider
 from minimal_harness.types import AgentMetadata, ToolMetadata
 
 from mh_orchestration_service.api.dependencies import (

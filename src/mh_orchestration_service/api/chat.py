@@ -31,6 +31,7 @@ from mh_orchestration_service.api.dependencies import (
     get_current_user,
 )
 from mh_orchestration_service.api.locale import parse_locale
+from mh_orchestration_service.context import get_current_trace_id
 from mh_orchestration_service.services.database import get_session_store
 from mh_orchestration_service.services.runtime_service import (
     acquire_session_lock,
@@ -239,6 +240,7 @@ async def chat(
         ]
 
         scenario_id = session.scenario_id or ""
+        trace_id = get_current_trace_id()
 
         async def _stream_with_lock():
             try:
@@ -253,6 +255,7 @@ async def chat(
                     store=store,
                     locale=locale,
                     scenario_id=scenario_id,
+                    trace_id=trace_id,
                 ):
                     yield event
             finally:
@@ -283,6 +286,7 @@ async def _stream_events(
     store: SessionStoreProtocol,
     locale: str = "",
     scenario_id: str = "",
+    trace_id: str = "",
 ) -> AsyncIterator[str]:
     runtime, agent_registry, tool_registry, _ = await create_runtime(
         request=request,
@@ -292,6 +296,7 @@ async def _stream_events(
         session_store=store,
         session_id=memory_id,
         scenario_id=scenario_id,
+        trace_id=trace_id,
     )
 
     task, stop_event, queue = await runtime.run(

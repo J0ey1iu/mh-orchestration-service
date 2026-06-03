@@ -28,6 +28,7 @@ async def get_user_id(request: Request) -> str:
     if not identity.user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
     set_current_user_id(identity.user_id)
+    request.scope["_user_id"] = identity.user_id
     return identity.user_id
 
 

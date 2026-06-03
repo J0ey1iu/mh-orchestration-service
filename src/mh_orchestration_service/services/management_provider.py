@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
-
 from mh_orchestration_service.services.registry_client import RegistryClient
 
 

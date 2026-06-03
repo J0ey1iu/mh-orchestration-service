@@ -57,6 +57,7 @@ def test_app(tmp_path):
     settings = ConfigSchema(
         db_path=str(tmp_path / "test.db"),
         cors_origins=[],
+        metrics_enabled=False,
     )
 
     @asynccontextmanager

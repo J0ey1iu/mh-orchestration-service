@@ -166,6 +166,9 @@ async def create_runtime(
     session_store: SessionStoreProtocol | None = None,
     session_id: str = "",
     scenario_id: str = "",
+    trace_id: str = "",
+    provider: str = "",
+    model: str = "",
 ) -> tuple[AgentRuntime, AgentRegistry, ToolRegistry, SessionStoreProtocol]:
     adapters = request.app.state.adapters
     llm_provider_registry = getattr(adapters, "llm_provider_registry", None)
@@ -271,9 +274,28 @@ async def create_runtime(
 
     if session_store is None:
         session_store = await get_session_store()
+
+    resolved_provider = provider
+    resolved_model = model
+    if not resolved_provider or not resolved_model:
+        target_agent_meta = await agent_registry.get(agent_name)
+        if target_agent_meta:
+            if not resolved_provider:
+                resolved_provider = target_agent_meta.provider
+            if not resolved_model:
+                resolved_model = target_agent_meta.model
+
     middleware = [
         PermissionMiddleware(user_id, adapters.permission_checker),
-        AuditMiddleware(user_id=user_id, session_id=session_id),
+        AuditMiddleware(
+            user_id=user_id,
+            session_id=session_id,
+            agent_id=agent_name,
+            scenario_id=scenario_id,
+            provider=resolved_provider,
+            model=resolved_model,
+            trace_id=trace_id,
+        ),
     ]
 
     llm_provider_resolver: Callable[[AgentMetadata], LLMProvider] | None = None

@@ -1,14 +1,6 @@
 from mh_orchestration_service.app import AppState, LifespanHook, create_app
-from mh_orchestration_service.services.m2m_auth import (
-    M2MAuthProvider,
-    _DefaultM2MAuthProvider,
-)
-from mh_orchestration_service.services.outbound_auth import (
-    OutboundAuthProvider,
-    _DefaultOutboundAuthProvider,
-)
 from mh_orchestration_service.config import ConfigSchema
-from mh_orchestration_service.config_manager import ConfigManager, ConfigError
+from mh_orchestration_service.config_manager import ConfigError, ConfigManager
 from mh_orchestration_service.config_mapping import ConfigMapping
 from mh_orchestration_service.config_protocols import ConfigProvider, SecretResolver
 from mh_orchestration_service.context import (
@@ -18,6 +10,14 @@ from mh_orchestration_service.context import (
     get_current_request,
     get_current_trace_id,
     get_current_user_id,
+)
+from mh_orchestration_service.services.m2m_auth import (
+    M2MAuthProvider,
+    _DefaultM2MAuthProvider,
+)
+from mh_orchestration_service.services.outbound_auth import (
+    OutboundAuthProvider,
+    _DefaultOutboundAuthProvider,
 )
 
 __all__ = (

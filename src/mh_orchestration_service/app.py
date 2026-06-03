@@ -32,6 +32,7 @@ from mh_orchestration_service.context import (
     set_current_request,
     set_current_trace_id,
 )
+from mh_orchestration_service.monitoring.middleware import AccessLogMiddleware
 from mh_orchestration_service.services.auth_client import _DefaultAuthProvider
 from mh_orchestration_service.services.generated_agent_provider import (
     AgentGenerator,
@@ -264,6 +265,20 @@ def create_app(
         _fill_default_adapters(state)
         app.state.adapters = state
 
+        if settings.metrics_enabled:
+            from mh_orchestration_service.monitoring.collector import (
+                MetricsCollector,
+                set_collector,
+            )
+
+            collector = MetricsCollector()
+            set_collector(collector)
+            collector.start_push(interval=settings.metrics_push_interval)
+            logging.getLogger("orchestration.app").info(
+                "Metrics collector started (push_interval=%ds)",
+                settings.metrics_push_interval,
+            )
+
         async with AsyncExitStack() as stack:
             if token_verifier is not None:
                 await stack.enter_async_context(token_verifier(app))
@@ -293,6 +308,17 @@ def create_app(
             )
             yield
 
+        if settings.metrics_enabled:
+            from mh_orchestration_service.monitoring.collector import (
+                get_collector,
+                set_collector,
+            )
+
+            collector = get_collector()
+            if collector:
+                await collector.stop_push()
+                set_collector(None)
+
         await _close_adapters(state)
         await get_db().close()
 
@@ -304,6 +330,8 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.add_middleware(AccessLogMiddleware)
 
     @app.middleware("http")
     async def request_context_middleware(request, call_next):

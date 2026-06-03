@@ -65,9 +65,7 @@ class TestManagementAPI:
             headers=auth_header,
             json={"id": "del", "name": "To Delete"},
         )
-        resp = client.delete(
-            "/api/v1/management/scenarios/del", headers=auth_header
-        )
+        resp = client.delete("/api/v1/management/scenarios/del", headers=auth_header)
         assert resp.status_code == 200
         assert resp.json()["status"] == "deleted"
 
@@ -128,9 +126,7 @@ class TestManagementAPI:
             headers=auth_header,
             json={"name": "del-agent", "display_name": "To Delete"},
         )
-        resp = client.delete(
-            "/api/v1/management/agents/del-agent", headers=auth_header
-        )
+        resp = client.delete("/api/v1/management/agents/del-agent", headers=auth_header)
         assert resp.status_code == 200
 
     def test_create_tool(self, client, auth_header):
@@ -185,16 +181,16 @@ class TestManagementAPI:
                 "parameters": {"type": "object", "properties": {}},
             },
         )
-        resp = client.delete(
-            "/api/v1/management/tools/del-tool", headers=auth_header
-        )
+        resp = client.delete("/api/v1/management/tools/del-tool", headers=auth_header)
         assert resp.status_code == 200
         assert resp.json()["status"] == "deleted"
 
     def test_management_api_unauthorized(self, client):
         original = client.app.state.adapters.token_verifier.verify
         client.app.state.adapters.token_verifier.verify = AsyncMock(return_value=None)
-        resp = client.post("/api/v1/management/scenarios", json={"id": "x", "name": "x"})
+        resp = client.post(
+            "/api/v1/management/scenarios", json={"id": "x", "name": "x"}
+        )
         client.app.state.adapters.token_verifier.verify = original
         assert resp.status_code == 401
 
@@ -208,13 +204,15 @@ class TestManagementAPI:
             assert resp.status_code == 403
 
             resp2 = client.post(
-                "/api/v1/management/scenarios", headers=auth_header,
+                "/api/v1/management/scenarios",
+                headers=auth_header,
                 json={"id": "x", "name": "x"},
             )
             assert resp2.status_code == 403
 
             resp3 = client.delete(
-                "/api/v1/management/scenarios/x", headers=auth_header,
+                "/api/v1/management/scenarios/x",
+                headers=auth_header,
             )
             assert resp3.status_code == 403
         finally:

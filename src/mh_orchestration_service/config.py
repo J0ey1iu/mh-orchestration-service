@@ -29,6 +29,10 @@ class ConfigSchema(BaseModel):
     # ── Logging ─────────────────────────────────────
     log_level: str = "INFO"
 
+    # ── Monitoring ──────────────────────────────────
+    metrics_enabled: bool = False
+    metrics_push_interval: int = 60
+
     @property
     def database_url(self) -> str:
         return self.db_path
