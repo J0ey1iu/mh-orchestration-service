@@ -67,11 +67,17 @@ async def run_scenario_eval(
                 else:
                     session_id = f"eval_{run_record.run_id}"
                     store = await get_session_store()
+                    agent_meta = await adapters.management_provider.get_agent(
+                        agent_name
+                    )
                     await store.create_session(
                         session_id=session_id,
                         agent_name=agent_name,
                         user_id=user_id,
                         scenario_id=config.scenario_id,
+                        display_name_locale=agent_meta.get("display_name_locale")
+                        if agent_meta
+                        else None,
                     )
 
                     runtime, _, _, _ = await create_runtime(

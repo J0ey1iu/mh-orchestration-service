@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -42,12 +43,8 @@ class ToolGenerator(Protocol):
     """
 
     def generate_stream(
-        self, natural_description: str
+        self, natural_description: str, stop_event: asyncio.Event | None = None
     ) -> AsyncGenerator[dict[str, Any], None]: ...
-
-
-# Backward-compat alias
-GeneratedToolProvider = ToolGenerator
 
 
 def tool_to_dict(t: GeneratedToolMeta) -> dict[str, Any]:
@@ -126,7 +123,7 @@ class DefaultToolGenerator:
         self._llm_factory = llm_factory
 
     async def generate_stream(
-        self, natural_description: str
+        self, natural_description: str, stop_event: asyncio.Event | None = None
     ) -> AsyncGenerator[dict[str, Any], None]:
         if self._llm_factory is None:
             yield {
@@ -149,7 +146,7 @@ class DefaultToolGenerator:
         ]
 
         stream = await llm.chat(
-            messages=messages, tools=[], temperature=0.3, max_tokens=4096
+            messages=messages, tools=[], temperature=0.3, max_tokens=4096, stop_event=stop_event
         )
 
         content_parts: list[str] = []
@@ -201,7 +198,3 @@ class DefaultToolGenerator:
         )
 
         yield {"type": "generated", "data": tool_to_dict(tool)}
-
-
-# Backward-compat alias
-DefaultGeneratedToolProvider = DefaultToolGenerator

@@ -238,6 +238,8 @@ async def chat(
             t for t in tool_names if match_permission(user_perms, f"use:tool:{t}")
         ]
 
+        scenario_id = session.scenario_id or ""
+
         async def _stream_with_lock():
             try:
                 async for event in _stream_events(
@@ -250,6 +252,7 @@ async def chat(
                     tool_names=tool_names,
                     store=store,
                     locale=locale,
+                    scenario_id=scenario_id,
                 ):
                     yield event
             finally:
@@ -279,6 +282,7 @@ async def _stream_events(
     tool_names: list[str],
     store: SessionStoreProtocol,
     locale: str = "",
+    scenario_id: str = "",
 ) -> AsyncIterator[str]:
     runtime, agent_registry, tool_registry, _ = await create_runtime(
         request=request,
@@ -287,6 +291,7 @@ async def _stream_events(
         tool_names=tool_names,
         session_store=store,
         session_id=memory_id,
+        scenario_id=scenario_id,
     )
 
     task, stop_event, queue = await runtime.run(

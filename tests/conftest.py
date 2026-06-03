@@ -92,4 +92,4 @@ def client(test_app) -> Generator[TestClient, None, None]:
 
 @pytest.fixture
 def auth_header() -> dict[str, str]:
-    return {"X-User-Id": "admin"}
+    return {"X-User-Id": "1"}

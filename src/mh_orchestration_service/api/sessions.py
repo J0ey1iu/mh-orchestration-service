@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from mh_orchestration_service.api.dependencies import get_current_user
+from mh_orchestration_service.api.locale import parse_locale, resolve_display_name
 from mh_orchestration_service.services.database import get_session_store
 
 logger = logging.getLogger("orchestration.sessions")
@@ -25,6 +26,7 @@ async def list_sessions(
     user_id: str = Depends(get_current_user),
 ):
     logger.debug("INBOUND list_sessions — user=%s scenario_id=%s", user_id, scenario_id)
+    locale = parse_locale(request.headers.get("accept-language"))
     store = await get_session_store()
     sessions = await store.list_user_sessions(user_id, scenario_id)
     return [
@@ -36,6 +38,11 @@ async def list_sessions(
             "agent_name": s["agent_name"],
             "user_id": s["user_id"],
             "scenario_id": s["scenario_id"],
+            "display_name": resolve_display_name(
+                s["agent_name"],
+                s.get("display_name_locale"),
+                locale,
+            ),
         }
         for s in sessions
     ]
@@ -53,11 +60,21 @@ async def create_session(
         body.agent_name,
         body.scenario_id,
     )
+    locale = parse_locale(request.headers.get("accept-language"))
+
+    display_name_locale: str | None = None
+    adapters = request.app.state.adapters
+    if adapters.management_provider is not None:
+        agent_meta = await adapters.management_provider.get_agent(body.agent_name)
+        if agent_meta is not None:
+            display_name_locale = agent_meta.get("display_name_locale")
+
     store = await get_session_store()
     session = await store.create_session(
         agent_name=body.agent_name,
         user_id=user_id,
         scenario_id=body.scenario_id,
+        display_name_locale=display_name_locale,
     )
     return {
         "memory_id": session.session_id,
@@ -67,6 +84,11 @@ async def create_session(
         "agent_name": session.agent_name,
         "user_id": session.user_id,
         "scenario_id": session.scenario_id,
+        "display_name": resolve_display_name(
+            session.agent_name,
+            display_name_locale,
+            locale,
+        ),
     }
 
 
@@ -82,6 +104,7 @@ async def get_session(
         raise HTTPException(status_code=404, detail="Session not found")
     if session.user_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
+    locale = parse_locale(request.headers.get("accept-language"))
     return {
         "memory_id": session.session_id,
         "title": session.title or "Untitled",
@@ -90,6 +113,11 @@ async def get_session(
         "agent_name": session.agent_name,
         "user_id": session.user_id,
         "scenario_id": session.scenario_id,
+        "display_name": resolve_display_name(
+            session.agent_name,
+            session.display_name_locale,
+            locale,
+        ),
     }
 
 

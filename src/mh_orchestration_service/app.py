@@ -33,6 +33,10 @@ from mh_orchestration_service.context import (
     set_current_trace_id,
 )
 from mh_orchestration_service.services.auth_client import _DefaultAuthProvider
+from mh_orchestration_service.services.generated_agent_provider import (
+    AgentGenerator,
+    DefaultAgentGenerator,
+)
 from mh_orchestration_service.services.generated_tool_provider import (
     DefaultToolGenerator,
     ToolGenerator,
@@ -104,6 +108,7 @@ class AppState:
         m2m_auth_provider: M2MAuthProvider | None = None,
         llm_extra_headers_provider: ExtraHeadersProvider | None = None,
         generated_tool_provider: ToolGenerator | None = None,
+        generated_agent_provider: AgentGenerator | None = None,
         llm_provider_registry: LLMProviderRegistry | None = None,
     ) -> None:
         self.settings = settings
@@ -116,6 +121,7 @@ class AppState:
         self.m2m_auth_provider = m2m_auth_provider
         self.llm_extra_headers_provider = llm_extra_headers_provider
         self.generated_tool_provider = generated_tool_provider
+        self.generated_agent_provider = generated_agent_provider
         self.llm_provider_registry = llm_provider_registry
 
 
@@ -174,6 +180,10 @@ def _fill_default_adapters(state: AppState) -> None:
         state.generated_tool_provider = DefaultToolGenerator()
         state.generated_tool_provider.set_llm_factory(state.llm_provider_factory)
 
+    if state.generated_agent_provider is None:
+        state.generated_agent_provider = DefaultAgentGenerator()
+        state.generated_agent_provider.set_llm_factory(state.llm_provider_factory)
+
 
 async def _close_adapters(state: AppState) -> None:
     """Close built-in adapters that were created by ``_fill_default_adapters``."""
@@ -204,6 +214,7 @@ def create_app(
     m2m_auth_provider: LifespanHook | None = None,
     llm_extra_headers_provider: ExtraHeadersProvider | None = None,
     generated_tool_provider: LifespanHook | None = None,
+    generated_agent_provider: LifespanHook | None = None,
     llm_provider_registry: LifespanHook | None = None,
     lifespan_hooks: list[LifespanHook] | None = None,
 ) -> FastAPI:
@@ -270,6 +281,8 @@ def create_app(
                 await stack.enter_async_context(m2m_auth_provider(app))
             if generated_tool_provider is not None:
                 await stack.enter_async_context(generated_tool_provider(app))
+            if generated_agent_provider is not None:
+                await stack.enter_async_context(generated_agent_provider(app))
 
             for hook in lifespan_hooks or []:
                 await stack.enter_async_context(hook(app))
