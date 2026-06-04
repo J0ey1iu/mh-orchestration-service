@@ -59,6 +59,8 @@ class AuditMiddleware(Middleware):
             collector.agent_runs_total.inc(
                 {"agent_id": self._agent_id, "status": "started"}
             )
+            user_labels = {"user_id": self._user_id, "agent_id": self._agent_id}
+            collector.user_agent_runs_total.inc({**user_labels, "status": "started"})
 
     async def on_agent_end(self, event: AgentEnd) -> None:
         entry = self._base()
@@ -72,6 +74,9 @@ class AuditMiddleware(Middleware):
         if collector is not None:
             collector.agent_runs_total.inc(
                 {"agent_id": self._agent_id, "status": status}
+            )
+            collector.user_agent_runs_total.inc(
+                {"user_id": self._user_id, "agent_id": self._agent_id, "status": status}
             )
 
     async def on_llm_start(self, messages: list[dict[str, Any]], tools: Any) -> None:
@@ -123,6 +128,21 @@ class AuditMiddleware(Middleware):
             )
             collector.llm_request_duration_ms.observe(labels, duration_ms)
 
+            user_labels = {
+                "user_id": self._user_id,
+                "provider": self._provider,
+                "model": self._model,
+            }
+            collector.user_llm_requests_total.inc(
+                {**user_labels, "status": "error" if event.error else "ok"}
+            )
+            collector.user_llm_tokens_total.inc(
+                {**user_labels, "type": "prompt"}, prompt_tokens
+            )
+            collector.user_llm_tokens_total.inc(
+                {**user_labels, "type": "completion"}, completion_tokens
+            )
+
     async def on_tool_start(self, tool_call: ToolCall) -> None:
         tool_name = tool_call.get("function", {}).get("name", "unknown")
 
@@ -145,6 +165,13 @@ class AuditMiddleware(Middleware):
         collector = get_collector()
         if collector is not None:
             collector.tool_calls_total.inc({"tool_name": tool_name, "status": status})
+            collector.user_tool_calls_total.inc(
+                {
+                    "user_id": self._user_id,
+                    "tool_name": tool_name,
+                    "status": status,
+                }
+            )
 
     async def on_tool_error(self, tool_call: ToolCall, error: Exception) -> None:
         tool_name = tool_call.get("function", {}).get("name", "unknown")
@@ -158,3 +185,10 @@ class AuditMiddleware(Middleware):
         collector = get_collector()
         if collector is not None:
             collector.tool_calls_total.inc({"tool_name": tool_name, "status": "error"})
+            collector.user_tool_calls_total.inc(
+                {
+                    "user_id": self._user_id,
+                    "tool_name": tool_name,
+                    "status": "error",
+                }
+            )

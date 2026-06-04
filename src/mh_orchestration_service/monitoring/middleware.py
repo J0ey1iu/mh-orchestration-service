@@ -39,6 +39,15 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
                     collector.http_request_duration_ms.observe(
                         {"method": method, "path": path}, duration_ms
                     )
+                    if user_id:
+                        collector.user_http_requests_total.inc(
+                            {
+                                "user_id": user_id,
+                                "method": method,
+                                "path": path,
+                                "status": str(status_code),
+                            }
+                        )
 
             entry = {
                 "logger": "orchestration.access",

@@ -98,6 +98,33 @@ class _LabeledHistogram:
             return result
 
 
+class _BoundedLabeledCounter:
+    def __init__(self, ttl_seconds: int = 3600) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, tuple[_Counter, float]] = {}
+        self._ttl = ttl_seconds
+
+    def inc(self, labels: dict[str, str], delta: int = 1) -> None:
+        key = _labels_key(labels)
+        now = time.time()
+        with self._lock:
+            if key not in self._entries:
+                self._entries[key] = (_Counter(), now)
+            self._entries[key][0].inc(delta)
+            self._entries[key] = (self._entries[key][0], now)
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        now = time.time()
+        with self._lock:
+            self._entries = {
+                k: v for k, v in self._entries.items() if now - v[1] <= self._ttl
+            }
+            return [
+                {"labels": json.loads(k), "value": c.get()}
+                for k, (c, _) in self._entries.items()
+            ]
+
+
 class _Gauge:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -137,6 +164,12 @@ class MetricsCollector:
         self.agent_runs_total = _LabeledCounter()
         self.tool_calls_total = _LabeledCounter()
         self.sessions_active = _Gauge()
+
+        self.user_http_requests_total = _BoundedLabeledCounter()
+        self.user_llm_requests_total = _BoundedLabeledCounter()
+        self.user_llm_tokens_total = _BoundedLabeledCounter()
+        self.user_agent_runs_total = _BoundedLabeledCounter()
+        self.user_tool_calls_total = _BoundedLabeledCounter()
 
     @property
     def instance_id(self) -> str:
@@ -180,6 +213,11 @@ class MetricsCollector:
             "agent_runs_total": self.agent_runs_total.snapshot(),
             "tool_calls_total": self.tool_calls_total.snapshot(),
             "sessions_active": self.sessions_active.get(),
+            "user_http_requests_total": self.user_http_requests_total.snapshot(),
+            "user_llm_requests_total": self.user_llm_requests_total.snapshot(),
+            "user_llm_tokens_total": self.user_llm_tokens_total.snapshot(),
+            "user_agent_runs_total": self.user_agent_runs_total.snapshot(),
+            "user_tool_calls_total": self.user_tool_calls_total.snapshot(),
         }
 
     def live_snapshot(self) -> dict[str, Any]:
@@ -194,4 +232,9 @@ class MetricsCollector:
             "llm_request_duration_ms": self.llm_request_duration_ms.snapshot(),
             "agent_runs_total": self.agent_runs_total.snapshot(),
             "tool_calls_total": self.tool_calls_total.snapshot(),
+            "user_http_requests_total": self.user_http_requests_total.snapshot(),
+            "user_llm_requests_total": self.user_llm_requests_total.snapshot(),
+            "user_llm_tokens_total": self.user_llm_tokens_total.snapshot(),
+            "user_agent_runs_total": self.user_agent_runs_total.snapshot(),
+            "user_tool_calls_total": self.user_tool_calls_total.snapshot(),
         }
