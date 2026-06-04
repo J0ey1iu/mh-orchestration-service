@@ -69,8 +69,9 @@ async def calculator_execute(
                     "result": result,
                 },
             )
-        except Exception as e:
-            yield _sse_line("error", {"message": str(e)})
+        except Exception:
+            logger.exception("Calculator execution error")
+            yield _sse_line("error", {"message": "Internal server error"})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -89,49 +90,61 @@ async def discover_agents_execute(
     caller_agent_name = request.query_params.get("agent_name", "")
 
     async def event_stream():
-        adapters = request.app.state.adapters
-        scenario_agent_names = await _get_permitted_scenario_agents(
-            adapters.management_provider,
-            adapters.permission_checker,
-            scenario_id,
-            app_id,
-        )
-
-        user_perms: list[str] | None = None
-        if scenario_agent_names is None:
-            if adapters.permission_checker:
-                user_perms = await adapters.permission_checker.get_permissions(app_id)
-
-        agents = await adapters.management_provider.list_agents()
-        result = []
-        for a in agents:
-            name = a["name"]
-            if caller_agent_name and name == caller_agent_name:
-                continue
-            if exclude and name == exclude:
-                continue
-            if scenario_agent_names is not None and name not in scenario_agent_names:
-                continue
-            if user_perms is not None and not match_permission(
-                user_perms, f"use:agent:{name}"
-            ):
-                continue
-            result.append(
-                {
-                    "name": a["name"],
-                    "display_name": resolve_display_name(
-                        a.get("display_name", a["name"]),
-                        a.get("display_name_locale"),
-                        locale,
-                    ),
-                    "description": resolve_description(
-                        a.get("description", ""),
-                        a.get("description_locale"),
-                        locale,
-                    ),
-                }
+        try:
+            adapters = request.app.state.adapters
+            scenario_agent_names = await _get_permitted_scenario_agents(
+                adapters.management_provider,
+                adapters.permission_checker,
+                scenario_id,
+                app_id,
             )
-        yield _sse_line("tool_end", {"status": "ok", "agents": result})
+
+            user_perms: list[str] | None = None
+            if scenario_agent_names is None:
+                if adapters.permission_checker:
+                    user_perms = await adapters.permission_checker.get_permissions(
+                        app_id
+                    )
+
+            agents = await adapters.management_provider.list_agents()
+            result = []
+            for a in agents:
+                name = a["name"]
+                if caller_agent_name and name == caller_agent_name:
+                    continue
+                if exclude and name == exclude:
+                    continue
+                if (
+                    scenario_agent_names is not None
+                    and name not in scenario_agent_names
+                ):
+                    continue
+                if user_perms is not None and not match_permission(
+                    user_perms, f"use:agent:{name}"
+                ):
+                    continue
+                result.append(
+                    {
+                        "name": a["name"],
+                        "display_name": resolve_display_name(
+                            a.get("display_name", a["name"]),
+                            a.get("display_name_locale"),
+                            locale,
+                        ),
+                        "description": resolve_description(
+                            a.get("description", ""),
+                            a.get("description_locale"),
+                            locale,
+                        ),
+                    }
+                )
+            yield _sse_line("tool_end", {"status": "ok", "agents": result})
+        except Exception:
+            logger.exception("Discover agents execution error")
+            try:
+                yield _sse_line("error", {"message": "Internal server error"})
+            except Exception:
+                pass
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -160,188 +173,196 @@ async def handoff_execute(
     scenario_id = request.query_params.get("scenario_id", "")
 
     async def event_stream():
-        adapters = request.app.state.adapters
-
-        agent_meta = await adapters.management_provider.get_agent(target_agent_name)
-        if agent_meta is None:
-            yield _sse_line(
-                "error", {"message": f"Handoff target '{target_agent_name}' not found"}
-            )
-            return
-
-        combined = f"Context: {context_summary}\n\nTask: {task_description}"
-
-        handoff_session_id = uuid.uuid4().hex
-        store = await get_session_store()
-        await store.create_session(
-            session_id=handoff_session_id,
-            agent_name=target_agent_name,
-            user_id=user_id,
-            scenario_id=scenario_id,
-            display_name_locale=agent_meta.get("display_name_locale"),
-        )
-
-        lock = await acquire_session_lock(handoff_session_id)
-        sub_task = None
-        sub_stop_event = None
-        result_text = ""
-
         try:
-            runtime, _agent_registry, _tool_registry, _ = await create_runtime(
-                request=request,
-                user_id=user_id,
-                agent_name=target_agent_name,
-                tool_names=[],
-                session_store=store,
+            adapters = request.app.state.adapters
+
+            agent_meta = await adapters.management_provider.get_agent(target_agent_name)
+            if agent_meta is None:
+                yield _sse_line(
+                    "error",
+                    {"message": f"Handoff target '{target_agent_name}' not found"},
+                )
+                return
+
+            combined = f"Context: {context_summary}\n\nTask: {task_description}"
+
+            handoff_session_id = uuid.uuid4().hex
+            store = await get_session_store()
+            await store.create_session(
                 session_id=handoff_session_id,
+                agent_name=target_agent_name,
+                user_id=user_id,
                 scenario_id=scenario_id,
+                display_name_locale=agent_meta.get("display_name_locale"),
             )
 
-            sub_task, sub_stop_event, queue = await runtime.run(
-                user_input=[{"type": "text", "text": combined}],
-                agent_metadata_id=target_agent_name,
-                memory_id=handoff_session_id,
-                context={"locale": locale, "agent_name": target_agent_name},
-            )
+            lock = await acquire_session_lock(handoff_session_id)
+            sub_task = None
+            sub_stop_event = None
+            result_text = ""
 
-            yield _sse_line(
-                "tool_progress",
-                {
-                    "status": "handoff_started",
-                    "message": f"Starting delegated task to {target_agent_name}...",
-                },
-            )
+            try:
+                runtime, _agent_registry, _tool_registry, _ = await create_runtime(
+                    request=request,
+                    user_id=user_id,
+                    agent_name=target_agent_name,
+                    tool_names=[],
+                    session_store=store,
+                    session_id=handoff_session_id,
+                    scenario_id=scenario_id,
+                )
 
-            while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=0.5)
-                except asyncio.TimeoutError:
-                    if sub_stop_event.is_set():
+                sub_task, sub_stop_event, queue = await runtime.run(
+                    user_input=[{"type": "text", "text": combined}],
+                    agent_metadata_id=target_agent_name,
+                    memory_id=handoff_session_id,
+                    context={"locale": locale, "agent_name": target_agent_name},
+                )
+
+                yield _sse_line(
+                    "tool_progress",
+                    {
+                        "status": "handoff_started",
+                        "message": f"Starting delegated task to {target_agent_name}...",
+                    },
+                )
+
+                while True:
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=0.5)
+                    except asyncio.TimeoutError:
+                        if sub_stop_event.is_set():
+                            yield _sse_line(
+                                "tool_progress",
+                                {
+                                    "status": "error",
+                                    "message": "Delegated task was interrupted",
+                                },
+                            )
+                            break
+                        continue
+
+                    if event is None:
+                        break
+
+                    if isinstance(event, MessageEvent):
+                        continue
+
+                    if isinstance(event, LLMStart):
                         yield _sse_line(
                             "tool_progress",
                             {
-                                "status": "error",
-                                "message": "Delegated task was interrupted",
+                                "status": "progress",
+                                "type": "llm_start",
+                                "message": "LLM generating...",
                             },
                         )
-                        break
-                    continue
+                    elif isinstance(event, LLMEnd):
+                        if event.content:
+                            result_text = str(event.content)
+                        msg = (event.content or "LLM response generated")[:200]
+                        if event.error:
+                            msg = f"[Error] {event.error}: {msg}"
+                        yield _sse_line(
+                            "tool_progress",
+                            {
+                                "status": "progress",
+                                "type": "llm_end",
+                                "message": msg,
+                            },
+                        )
+                    elif isinstance(event, ExecutionStart):
+                        names = ", ".join(
+                            tc["function"]["name"] for tc in event.tool_calls
+                        )
+                        yield _sse_line(
+                            "tool_progress",
+                            {
+                                "status": "progress",
+                                "type": "execution_start",
+                                "message": f"Executing: {names}",
+                            },
+                        )
+                    elif isinstance(event, ExecutionEnd):
+                        parts = []
+                        for tc, result in event.results:
+                            name = tc["function"]["name"]
+                            r = (str(result) if result is not None else "")[:200]
+                            parts.append(f"{name} => {r}")
+                        msg = " | ".join(parts) if parts else "Tool execution complete"
+                        if event.error:
+                            msg = f"[Error] {event.error}: {msg}"
+                        yield _sse_line(
+                            "tool_progress",
+                            {
+                                "status": "progress",
+                                "type": "execution_end",
+                                "message": msg,
+                            },
+                        )
+                    elif isinstance(event, ToolStart):
+                        name = event.tool_call["function"]["name"]
+                        yield _sse_line(
+                            "tool_progress",
+                            {
+                                "status": "progress",
+                                "type": "tool_start",
+                                "message": f"Tool started: {name}",
+                            },
+                        )
+                    elif isinstance(event, ToolEnd):
+                        name = event.tool_call["function"]["name"]
+                        result_str = (
+                            str(event.result) if event.result is not None else ""
+                        )[:200]
+                        yield _sse_line(
+                            "tool_progress",
+                            {
+                                "status": "progress",
+                                "type": "tool_end",
+                                "message": f"Tool {name} completed: {result_str}",
+                            },
+                        )
+                    elif isinstance(event, AgentEnd):
+                        result_text = event.response or result_text
+                        yield _sse_line(
+                            "tool_progress",
+                            {
+                                "status": "progress",
+                                "type": "agent_end",
+                                "message": (event.response or "Agent completed")[:200],
+                            },
+                        )
 
-                if event is None:
-                    break
+                yield _sse_line(
+                    "tool_end",
+                    {
+                        "status": "handoff_complete",
+                        "message": "Delegated task completed",
+                        "result": result_text,
+                    },
+                )
 
-                if isinstance(event, MessageEvent):
-                    continue
-
-                if isinstance(event, LLMStart):
-                    yield _sse_line(
-                        "tool_progress",
-                        {
-                            "status": "progress",
-                            "type": "llm_start",
-                            "message": "LLM generating...",
-                        },
-                    )
-                elif isinstance(event, LLMEnd):
-                    if event.content:
-                        result_text = str(event.content)
-                    msg = (event.content or "LLM response generated")[:200]
-                    if event.error:
-                        msg = f"[Error] {event.error}: {msg}"
-                    yield _sse_line(
-                        "tool_progress",
-                        {
-                            "status": "progress",
-                            "type": "llm_end",
-                            "message": msg,
-                        },
-                    )
-                elif isinstance(event, ExecutionStart):
-                    names = ", ".join(tc["function"]["name"] for tc in event.tool_calls)
-                    yield _sse_line(
-                        "tool_progress",
-                        {
-                            "status": "progress",
-                            "type": "execution_start",
-                            "message": f"Executing: {names}",
-                        },
-                    )
-                elif isinstance(event, ExecutionEnd):
-                    parts = []
-                    for tc, result in event.results:
-                        name = tc["function"]["name"]
-                        r = (str(result) if result is not None else "")[:200]
-                        parts.append(f"{name} => {r}")
-                    msg = " | ".join(parts) if parts else "Tool execution complete"
-                    if event.error:
-                        msg = f"[Error] {event.error}: {msg}"
-                    yield _sse_line(
-                        "tool_progress",
-                        {
-                            "status": "progress",
-                            "type": "execution_end",
-                            "message": msg,
-                        },
-                    )
-                elif isinstance(event, ToolStart):
-                    name = event.tool_call["function"]["name"]
-                    yield _sse_line(
-                        "tool_progress",
-                        {
-                            "status": "progress",
-                            "type": "tool_start",
-                            "message": f"Tool started: {name}",
-                        },
-                    )
-                elif isinstance(event, ToolEnd):
-                    name = event.tool_call["function"]["name"]
-                    result_str = (
-                        str(event.result) if event.result is not None else ""
-                    )[:200]
-                    yield _sse_line(
-                        "tool_progress",
-                        {
-                            "status": "progress",
-                            "type": "tool_end",
-                            "message": f"Tool {name} completed: {result_str}",
-                        },
-                    )
-                elif isinstance(event, AgentEnd):
-                    result_text = event.response or result_text
-                    yield _sse_line(
-                        "tool_progress",
-                        {
-                            "status": "progress",
-                            "type": "agent_end",
-                            "message": (event.response or "Agent completed")[:200],
-                        },
-                    )
-
-            yield _sse_line(
-                "tool_end",
-                {
-                    "status": "handoff_complete",
-                    "message": "Delegated task completed",
-                    "result": result_text,
-                },
-            )
+            finally:
+                if sub_stop_event is not None:
+                    sub_stop_event.set()
+                if sub_task is not None:
+                    sub_task.cancel()
+                    try:
+                        await sub_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                await store.delete_session(handoff_session_id)
+                await release_session_lock(handoff_session_id, lock)
 
         except Exception:
             logger.exception("Handoff execution error")
-            yield _sse_line(
-                "error", {"message": "An internal error occurred during handoff"}
-            )
-        finally:
-            if sub_stop_event is not None:
-                sub_stop_event.set()
-            if sub_task is not None:
-                sub_task.cancel()
-                try:
-                    await sub_task
-                except (asyncio.CancelledError, Exception):
-                    pass
-            await store.delete_session(handoff_session_id)
-            await release_session_lock(handoff_session_id, lock)
+            try:
+                yield _sse_line(
+                    "error", {"message": "An internal error occurred during handoff"}
+                )
+            except Exception:
+                pass
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
