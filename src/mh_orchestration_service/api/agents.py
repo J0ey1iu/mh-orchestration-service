@@ -132,6 +132,9 @@ async def run_agent(
                 m2m_auth_provider=adapters.m2m_auth_provider,
                 identity=app_id or "",
                 outbound_auth_provider=outbound_auth_provider,
+                verify_agent_tool_ssl=getattr(
+                    adapters.settings, "verify_agent_tool_ssl", False
+                ),
             ),
         )
         try:

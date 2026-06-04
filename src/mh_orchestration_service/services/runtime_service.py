@@ -74,6 +74,7 @@ async def _agent_binding(
     m2m_auth_provider: M2MAuthProvider | None = None,
     identity: str = "",
     outbound_auth_provider: OutboundAuthProvider | None = None,
+    verify_agent_tool_ssl: bool = False,
 ) -> RemoteAgentBinding | LocalAgentBinding:
     if "endpoint_url" in meta and meta["endpoint_url"]:
         url = meta["endpoint_url"]
@@ -88,7 +89,10 @@ async def _agent_binding(
                 outbound_auth_provider, request, url, "agent"
             )
         return RemoteAgentBinding(
-            url=url, headers=headers, extra_headers_provider=extra_provider
+            url=url,
+            headers=headers,
+            extra_headers_provider=extra_provider,
+            verify_ssl=verify_agent_tool_ssl,
         )
     return LocalAgentBinding()
 
@@ -101,6 +105,7 @@ async def _tool_binding(
     identity: str = "",
     outbound_auth_provider: OutboundAuthProvider | None = None,
     scenario_id: str = "",
+    verify_agent_tool_ssl: bool = False,
 ) -> RemoteToolBinding | LocalToolBinding:
     if "endpoint_url" in meta and meta["endpoint_url"]:
         url = meta["endpoint_url"]
@@ -121,6 +126,7 @@ async def _tool_binding(
             headers=headers,
             extra_headers_provider=extra_provider,
             timeout=60.0,
+            verify_ssl=verify_agent_tool_ssl,
         )
     fn = meta.get("_fn")
     return LocalToolBinding(fn=fn)
@@ -174,6 +180,7 @@ async def create_runtime(
     llm_provider_registry = getattr(adapters, "llm_provider_registry", None)
     llm_extra_headers = getattr(adapters, "llm_extra_headers_provider", None)
     outbound_auth_provider = getattr(adapters, "outbound_auth_provider", None)
+    verify_agent_tool_ssl = getattr(adapters.settings, "verify_agent_tool_ssl", False)
 
     agent_registry = AgentRegistry()
 
@@ -235,6 +242,7 @@ async def create_runtime(
                     m2m_auth_provider=adapters.m2m_auth_provider,
                     identity=user_id,
                     outbound_auth_provider=outbound_auth_provider,
+                    verify_agent_tool_ssl=verify_agent_tool_ssl,
                 ),
             )
         )
@@ -268,6 +276,7 @@ async def create_runtime(
                     identity=user_id,
                     outbound_auth_provider=outbound_auth_provider,
                     scenario_id=scenario_id,
+                    verify_agent_tool_ssl=verify_agent_tool_ssl,
                 ),
             )
         )

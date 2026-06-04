@@ -29,6 +29,9 @@ class ConfigSchema(BaseModel):
     # ── Logging ─────────────────────────────────────
     log_level: str = "INFO"
 
+    # ── SSL (remote agent/tool calls) ───────────────
+    verify_agent_tool_ssl: bool = False
+
     # ── Monitoring ──────────────────────────────────
     metrics_enabled: bool = False
     metrics_push_interval: int = 60
