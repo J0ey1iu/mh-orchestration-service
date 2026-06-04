@@ -174,6 +174,7 @@ async def handoff_execute(
             session_id=handoff_session_id,
             agent_name=target_agent_name,
             user_id=user_id,
+            scenario_id=scenario_id,
             display_name_locale=agent_meta.get("display_name_locale"),
         )
 
