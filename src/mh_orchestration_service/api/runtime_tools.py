@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -12,8 +13,10 @@ from minimal_harness.auth import match_permission
 from minimal_harness.memory import system_message, user_message
 from minimal_harness.types import (
     AgentEnd,
+    AgentStart,
     ExecutionEnd,
     ExecutionStart,
+    LLMChunk,
     LLMEnd,
     LLMStart,
     MessageEvent,
@@ -200,6 +203,11 @@ async def handoff_execute(
             sub_task = None
             sub_stop_event = None
             result_text = ""
+            llm_content = ""
+            last_chunk_send = 0.0
+            last_sent_len = 0
+            CHUNK_INTERVAL = 0.5
+            CHUNK_SIZE_THRESHOLD = 100
 
             try:
                 runtime, _agent_registry, _tool_registry, _ = await create_runtime(
@@ -223,7 +231,11 @@ async def handoff_execute(
                     "tool_progress",
                     {
                         "status": "handoff_started",
+                        "type": "handoff_started",
                         "message": f"Starting delegated task to {target_agent_name}...",
+                        "target_agent": target_agent_name,
+                        "task": task_description,
+                        "context": context_summary,
                     },
                 )
 
@@ -236,6 +248,7 @@ async def handoff_execute(
                                 "tool_progress",
                                 {
                                     "status": "error",
+                                    "type": "interrupted",
                                     "message": "Delegated task was interrupted",
                                 },
                             )
@@ -248,13 +261,62 @@ async def handoff_execute(
                     if isinstance(event, MessageEvent):
                         continue
 
-                    if isinstance(event, LLMStart):
+                    if isinstance(event, AgentStart):
+                        yield _sse_line(
+                            "tool_progress",
+                            {
+                                "status": "progress",
+                                "type": "agent_start",
+                                "message": "Agent started processing the delegated task",
+                            },
+                        )
+                        llm_content = ""
+                        last_chunk_send = 0.0
+                        last_sent_len = 0
+
+                    elif isinstance(event, LLMChunk):
+                        if event.chunk:
+                            delta = event.chunk.content or ""
+                            if delta:
+                                llm_content += delta
+                            now = time.monotonic()
+                            if (
+                                len(llm_content) - last_sent_len >= CHUNK_SIZE_THRESHOLD
+                                or now - last_chunk_send >= CHUNK_INTERVAL
+                            ):
+                                yield _sse_line(
+                                    "tool_progress",
+                                    {
+                                        "status": "progress",
+                                        "type": "llm_generating",
+                                        "message": "Generating...",
+                                        "content": llm_content,
+                                        "char_count": len(llm_content),
+                                    },
+                                )
+                                last_chunk_send = now
+                                last_sent_len = len(llm_content)
+
+                    elif isinstance(event, LLMStart):
+                        llm_content = ""
+                        last_chunk_send = 0.0
+                        last_sent_len = 0
                         yield _sse_line(
                             "tool_progress",
                             {
                                 "status": "progress",
                                 "type": "llm_start",
                                 "message": "LLM generating...",
+                                "tool_count": (
+                                    len(event.tools)
+                                    if isinstance(event.tools, list)
+                                    else 0
+                                ),
+                                "message_count": (
+                                    len(event.messages)
+                                    if isinstance(event.messages, list)
+                                    else 0
+                                ),
                             },
                         )
                     elif isinstance(event, LLMEnd):
@@ -263,12 +325,21 @@ async def handoff_execute(
                         msg = (event.content or "LLM response generated")[:200]
                         if event.error:
                             msg = f"[Error] {event.error}: {msg}"
+                        tool_call_names = (
+                            [tc["function"]["name"] for tc in event.tool_calls]
+                            if event.tool_calls
+                            else []
+                        )
                         yield _sse_line(
                             "tool_progress",
                             {
                                 "status": "progress",
                                 "type": "llm_end",
                                 "message": msg,
+                                "reasoning": event.reasoning_content,
+                                "tool_calls": tool_call_names,
+                                "usage": event.usage,
+                                "error": event.error,
                             },
                         )
                     elif isinstance(event, ExecutionStart):
@@ -281,14 +352,23 @@ async def handoff_execute(
                                 "status": "progress",
                                 "type": "execution_start",
                                 "message": f"Executing: {names}",
+                                "tools": [
+                                    {
+                                        "name": tc["function"]["name"],
+                                        "args": tc["function"]["arguments"],
+                                    }
+                                    for tc in event.tool_calls
+                                ],
                             },
                         )
                     elif isinstance(event, ExecutionEnd):
                         parts = []
+                        result_details = []
                         for tc, result in event.results:
                             name = tc["function"]["name"]
-                            r = (str(result) if result is not None else "")[:200]
+                            r = (str(result) if result is not None else "")[:500]
                             parts.append(f"{name} => {r}")
+                            result_details.append({"name": name, "result": r})
                         msg = " | ".join(parts) if parts else "Tool execution complete"
                         if event.error:
                             msg = f"[Error] {event.error}: {msg}"
@@ -298,6 +378,8 @@ async def handoff_execute(
                                 "status": "progress",
                                 "type": "execution_end",
                                 "message": msg,
+                                "results": result_details,
+                                "error": event.error,
                             },
                         )
                     elif isinstance(event, ToolStart):
@@ -308,19 +390,32 @@ async def handoff_execute(
                                 "status": "progress",
                                 "type": "tool_start",
                                 "message": f"Tool started: {name}",
+                                "tool_name": name,
+                                "tool_args": event.tool_call["function"]["arguments"],
                             },
                         )
                     elif isinstance(event, ToolEnd):
                         name = event.tool_call["function"]["name"]
                         result_str = (
                             str(event.result) if event.result is not None else ""
-                        )[:200]
+                        )[:500]
+                        is_error = isinstance(event.result, Exception) or (
+                            isinstance(event.result, str)
+                            and event.result.startswith("[Error]")
+                        )
                         yield _sse_line(
                             "tool_progress",
                             {
                                 "status": "progress",
                                 "type": "tool_end",
-                                "message": f"Tool {name} completed: {result_str}",
+                                "message": (
+                                    f"Tool {name} failed: {result_str}"
+                                    if is_error
+                                    else f"Tool {name} completed: {result_str}"
+                                ),
+                                "tool_name": name,
+                                "tool_result": result_str,
+                                "is_error": is_error,
                             },
                         )
                     elif isinstance(event, AgentEnd):
@@ -331,6 +426,10 @@ async def handoff_execute(
                                 "status": "progress",
                                 "type": "agent_end",
                                 "message": (event.response or "Agent completed")[:200],
+                                "time_taken": event.time_taken,
+                                "exceeded": event.exceeded,
+                                "interrupted": event.interrupted,
+                                "error": event.error,
                             },
                         )
 
@@ -338,8 +437,10 @@ async def handoff_execute(
                     "tool_end",
                     {
                         "status": "handoff_complete",
+                        "type": "handoff_complete",
                         "message": "Delegated task completed",
                         "result": result_text,
+                        "target_agent": target_agent_name,
                     },
                 )
 
