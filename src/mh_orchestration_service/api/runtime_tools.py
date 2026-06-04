@@ -86,6 +86,7 @@ async def discover_agents_execute(
     locale = args.get("locale") or parse_locale(accept_language)
     exclude = args.get("exclude")
     scenario_id = request.query_params.get("scenario_id", "")
+    caller_agent_name = request.query_params.get("agent_name", "")
 
     async def event_stream():
         adapters = request.app.state.adapters
@@ -105,6 +106,8 @@ async def discover_agents_execute(
         result = []
         for a in agents:
             name = a["name"]
+            if caller_agent_name and name == caller_agent_name:
+                continue
             if exclude and name == exclude:
                 continue
             if scenario_agent_names is not None and name not in scenario_agent_names:

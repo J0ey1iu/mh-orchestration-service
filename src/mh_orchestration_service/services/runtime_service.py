@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable
 from typing import Any, Callable
+from urllib.parse import quote
 
 from fastapi import Request
 from minimal_harness.agent.registry import AgentRegistry
@@ -105,6 +106,7 @@ async def _tool_binding(
     identity: str = "",
     outbound_auth_provider: OutboundAuthProvider | None = None,
     scenario_id: str = "",
+    agent_name: str = "",
     verify_agent_tool_ssl: bool = False,
 ) -> RemoteToolBinding | LocalToolBinding:
     if "endpoint_url" in meta and meta["endpoint_url"]:
@@ -113,6 +115,8 @@ async def _tool_binding(
             url = str(request.base_url).rstrip("/") + url
         if scenario_id and name in ("discover_agents", "handoff"):
             url = f"{url}?scenario_id={scenario_id}"
+        if name == "discover_agents" and agent_name:
+            url = f"{url}{'&' if '?' in url else '?'}agent_name={quote(agent_name, safe='')}"
         headers: dict[str, str] = {}
         if m2m_auth_provider is not None and request is not None and identity:
             headers = await m2m_auth_provider.get_identity_headers(request, identity)
@@ -276,6 +280,7 @@ async def create_runtime(
                     identity=user_id,
                     outbound_auth_provider=outbound_auth_provider,
                     scenario_id=scenario_id,
+                    agent_name=agent_name,
                     verify_agent_tool_ssl=verify_agent_tool_ssl,
                 ),
             )
