@@ -188,6 +188,10 @@ class MetricsCollector:
             "uptime_seconds": round(time.time() - self._start_time, 2),
             "sessions_active": self.sessions_active.get(),
             "http_requests_total": self.http_requests_total.snapshot(),
+            "http_request_duration_ms": self.http_request_duration_ms.snapshot(),
+            "llm_requests_total": self.llm_requests_total.snapshot(),
             "llm_tokens_total": self.llm_tokens_total.snapshot(),
+            "llm_request_duration_ms": self.llm_request_duration_ms.snapshot(),
             "agent_runs_total": self.agent_runs_total.snapshot(),
+            "tool_calls_total": self.tool_calls_total.snapshot(),
         }

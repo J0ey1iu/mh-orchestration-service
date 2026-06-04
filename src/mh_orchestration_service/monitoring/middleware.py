@@ -30,14 +30,15 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
             trace_id = get_current_trace_id()
             user_id = request.scope.get("_user_id", get_current_user_id() or "") or ""
 
-            collector = get_collector()
-            if collector is not None:
-                collector.http_requests_total.inc(
-                    {"method": method, "path": path, "status": str(status_code)}
-                )
-                collector.http_request_duration_ms.observe(
-                    {"method": method, "path": path}, duration_ms
-                )
+            if request.method != "OPTIONS":
+                collector = get_collector()
+                if collector is not None:
+                    collector.http_requests_total.inc(
+                        {"method": method, "path": path, "status": str(status_code)}
+                    )
+                    collector.http_request_duration_ms.observe(
+                        {"method": method, "path": path}, duration_ms
+                    )
 
             entry = {
                 "logger": "orchestration.access",
