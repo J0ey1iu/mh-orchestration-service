@@ -113,8 +113,7 @@ class ConfigSchema(BaseModel):
     llm_api_key: str = ""
     llm_base_url: str = ""
     llm_model: str = ""
-    enable_builtin_agents: bool = False      # Demo switch — OFF by default for production
-    dev_mode: bool = False                  # Dev mode: exposes /api/v1/dev/* routes and SPA static files
+    dev_mode: bool = False                  # Dev mode: built-in agents, dev routes, SPA static files
 ```
 
 **Constraint:** All Config classes (including custom ones) MUST inherit from `pydantic.BaseModel`. `ConfigManager.resolve()` accesses `model_fields` at runtime and calls the constructor with `**kwargs`.
@@ -199,7 +198,7 @@ def create_app(
 - `settings` is REQUIRED
 - `token_verifier` / `permission_checker`: if both None → shared `_DefaultAuthProvider`; if one is None → its own `_DefaultAuthProvider` instance
 - `credential_verifier` None → `_DefaultCredentialVerifier` (hardcoded users)
-- `registry_provider` None → `RegistryClient(enable_builtin=settings.enable_builtin_agents)` (empty when builtin disabled, demo data when enabled)
+- `registry_provider` None → `RegistryClient(enable_builtin=settings.dev_mode)` (empty when dev_mode=false, demo data when true)
 - `llm_provider_factory` None → `partial(OpenAILLMProvider, ...)` from env config via `AsyncOpenAI` client
 - `logger` None → Python root logger
 

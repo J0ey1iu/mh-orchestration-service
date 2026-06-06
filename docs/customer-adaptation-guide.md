@@ -55,8 +55,8 @@ uvicorn mh_orchestration_service.main:app --port 8005
 
 ### 内置 Agent 开关
 
-内置 agent 通过 `ORCH_ENABLE_BUILTIN_AGENTS=true` 环境变量控制（默认 `false`）：
-- **开箱即用**：设置为 `true`，服务暴露 `triage`、`code-reviewer`、`writer` 三个样例 agent
+内置 agent 通过 `ORCH_DEV_MODE=true` 环境变量控制（默认 `false`）：
+- **开箱即用**：设置为 `true`，服务暴露 `triage`、`code-reviewer`、`writer` 三个样例 agent 以及开发调试用工具端点
 - **生产环境**：注释掉或设为 `false`，此时 `RegistryClient` 不返回任何数据，由企业通过 registry_provider lifespan hook 注入自己的注册中心
 - 内置 agent 全部**本地执行**，不依赖任何外部 agent service
 
@@ -473,8 +473,7 @@ settings = await config_mgr.resolve(ConfigSchema, prefix="ORCH")
 | `llm_api_key` | str | 否 | LLM API Key（敏感） |
 | `llm_base_url` | str | 否 | LLM 接口地址 |
 | `llm_model` | str | 否 | LLM 模型名 |
-| `enable_builtin_agents` | bool | 否 | 开箱即用演示开关（默认 false），开启后暴露内置 agent |
-| `dev_mode` | bool | 否 | 开发模式（默认 false），开启后暴露 `/api/v1/dev/*` 路由和前端静态文件 |
+| `dev_mode` | bool | 否 | 开发模式开关（默认 false），开启后暴露内置 agent、开发工具端点、SSO 登录及前端静态文件 |
 
 ### 为什么需要 ConfigManager？
 
@@ -704,7 +703,7 @@ uvicorn my_app:app \
 | `ORCH_LLM_API_KEY` | LLM API Key | 否 |
 | `ORCH_LLM_BASE_URL` | LLM 接口地址 | 否 |
 | `ORCH_LLM_MODEL` | LLM 模型名 | 否 |
-| `ORCH_ENABLE_BUILTIN_AGENTS` | 内置 agent 开关（默认 false，设为 true 启用样例 agent） | 否 |
+| `ORCH_DEV_MODE` | 开发模式开关（默认 false，设为 true 启用内置 agent、开发工具及 SSO 登录） | 否 |
 
 ---
 

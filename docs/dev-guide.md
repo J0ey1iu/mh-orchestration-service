@@ -414,8 +414,7 @@ uvicorn my_app:app --host 0.0.0.0 --port 8005 --workers 4
 | `db_path` | `ORCH_DB_PATH` | 否 | SQLite 数据库文件路径（默认 `./sessions.db`） |
 | `db_auto_schema` | `ORCH_DB_AUTO_SCHEMA` | 否 | 默认 false，自动建表 |
 | `cors_origins` | `ORCH_CORS_ORIGINS` | 否 | JSON 数组格式 |
-| `enable_builtin_agents` | `ORCH_ENABLE_BUILTIN_AGENTS` | 否 | 默认 false |
-| `dev_mode` | `ORCH_DEV_MODE` | 否 | 默认 false |
+| `dev_mode` | `ORCH_DEV_MODE` | 否 | 默认 false，开发模式（内置 agent、前端、SSO） |
 | `enable_eval` | `ORCH_ENABLE_EVAL` | 否 | 默认 true，是否暴露评测接口 |
 | `eval_results_dir` | `ORCH_EVAL_RESULTS_DIR` | 否 | 默认 `./eval_results` |
 | `log_level` | `ORCH_LOG_LEVEL` | 否 | 默认 `INFO` |
@@ -504,7 +503,7 @@ db_svc.set_session_store_factory(lambda: MySessionStore(my_db_conn))
 2. **所有 Adapter 都用 LifespanHook 注入** — 不要依赖内置默认实现上生产
 3. **Config 类必须继承 pydantic.BaseModel** — ConfigManager 依赖 `model_fields`
 4. **ORCH_TOKEN_SECRET_KEY 必须修改** — 默认仅用于开发
-5. **内置 agent 仅用于演示** — 生产环境 `ORCH_ENABLE_BUILTIN_AGENTS=false`
+5. **内置 agent 仅用于演示** — 生产环境 `ORCH_DEV_MODE=false`
 6. **SSE 流协议** — Chat API 使用 SSE 流式推送事件，前端监听 `message` 事件
 7. **日志审计** — 审计日志通过 `orchestration.audit` logger（INFO 级别）输出
 8. **LLM 配置通过 ORCH_PROVIDER** — 使用环境变量 `ORCH_PROVIDER_{NAME}__{KEY}` 而不是旧的 `ORCH_LLM_*` 变量

@@ -19,7 +19,7 @@ orchestration 通过 Protocol 接口与外部系统解耦。所有适配器通�
 |------|----------|----------|
 | `UserAuthProvider` | `_DefaultAuthProvider` — 提取 `X-User-Id` header/cookie | 实现 `verify(request) → UserIdentity` |
 | `PermissionChecker` | `_DefaultAuthProvider` — 内置权限表 (`admin` / `user`) | 实现 `check/get_permissions` |
-| `RegistryProvider` | `RegistryClient` — 内置数据（受 `enable_builtin_agents` 控制） | 实现 `get_agent/list_agents/get_tool/list_tools/get_scenario/list_scenarios` |
+| `RegistryProvider` | `RegistryClient` — 内置数据（受 `dev_mode` 控制） | 实现 `get_agent/list_agents/get_tool/list_tools/get_scenario/list_scenarios` |
 | `CredentialVerifier` | `_DefaultCredentialVerifier` — 内存用户表 (`admin/admin`) | 实现 `verify_credentials(username, password) → UserIdentity` |
 | `OutboundAuthProvider` | `_DefaultOutboundAuthProvider` — 透传请求 header | 实现 `get_headers(request, url, type) → dict` |
 | `M2MAuthProvider` | `_DefaultM2MAuthProvider` — 信任 `X-User-Id` | 实现 `authenticate(request) → str\|None` |
@@ -167,7 +167,7 @@ adapters.logger.info("Custom logger in use")  # 仅当注入了 Logger
 | `ORCH_LLM_MODEL` | `` | LLM 模型名 |
 | `ORCH_METRICS_ENABLED` | `false` | 启用指标采集（计数器/直方图/仪表盘）及 `/api/v1/metrics` 端点 |
 | `ORCH_METRICS_PUSH_INTERVAL` | `60` | 指标推送间隔（秒），仅 `ORCH_METRICS_ENABLED=true` 时生效 |
-| `ORCH_ENABLE_BUILTIN_AGENTS` | `false` | 开箱即用演示开关，开启后暴露内置 agent（triage/code-reviewer/writer） |
+| `ORCH_DEV_MODE` | `false` | 开发模式开关，开启后暴露内置 agent、开发调试工具端点及 SSO 登录页 |
 | `ORCH_ENABLE_FRONTEND` | `false` | 内置前端 UI 开关，开启后 FastAPI 在 `/` 直接 serve 编译后的 SPA |
 
 ### 客户侧数据库部署（openGauss）
@@ -261,9 +261,9 @@ class VaultSecretResolver(ConfigProvider):
         return await vault_client.read_secret(key)
 ```
 
-## 内置 Agent 样例（开箱即用）
+## 内置 Agent 样例 & 开发模式
 
-设置 `ORCH_ENABLE_BUILTIN_AGENTS=true` 后，服务会暴露 3 个内置样例 agent：
+设置 `ORCH_DEV_MODE=true` 后，服务会暴露 3 个内置样例 agent 以及开发调试用工具端点：
 
 | Agent | 功能 | 说明 |
 |-------|------|------|
@@ -273,7 +273,7 @@ class VaultSecretResolver(ConfigProvider):
 
 内置 agent 是**本地执行**（无 endpoint_url），不依赖任何外部服务。所有 agent 通过 `minimal-harness` SDK 的 `AgentRuntime` 在进程内运行。
 
-> **生产环境**请确保 `ORCH_ENABLE_BUILTIN_AGENTS` 为 `false`（默认值），并通过 `registry_provider` 参数注入企业自己的注册中心实现。
+> **生产环境**请确保 `ORCH_DEV_MODE` 为 `false`（默认值），并通过 `registry_provider` 参数注入企业自己的注册中心实现。
 
 ## 内置前端 UI（一站式部署）
 

@@ -140,7 +140,7 @@ def _fill_default_adapters(state: AppState) -> None:
     if state.management_provider is None:
         if state.registry_provider is None:
             state.management_provider = InMemoryManagementProvider(
-                enable_builtin=state.settings.enable_builtin_agents,
+                enable_builtin=state.settings.dev_mode,
             )
             state.registry_provider = state.management_provider
         elif isinstance(state.registry_provider, MetadataManager):
@@ -355,6 +355,12 @@ def create_app(
     if settings.dev_mode:
         app.include_router(dev_router)
         app.include_router(component_sources_router)
+
+        from mh_orchestration_service.api.runtime_tools_dev import (
+            router as dev_runtime_tools_router,
+        )
+
+        app.include_router(dev_runtime_tools_router)
 
         static_dir = Path(__file__).resolve().parent / "static"
         if static_dir.is_dir():

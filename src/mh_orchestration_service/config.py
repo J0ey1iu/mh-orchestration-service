@@ -17,9 +17,7 @@ class ConfigSchema(BaseModel):
     # ── CORS ────────────────────────────────────────
     cors_origins: list[str] = Field(default_factory=list)
 
-    # ── Built-in Agents (demo) ──────────────────────
-    enable_builtin_agents: bool = False
-
+    # ── Development Mode (local dev only) ──────────
     dev_mode: bool = False
 
     # ── Evaluation ──────────────────────────────────

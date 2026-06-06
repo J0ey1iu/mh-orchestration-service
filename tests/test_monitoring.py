@@ -293,7 +293,7 @@ class TestHealthEndpoints:
             db_path=str(tmp_path / "test.db"),
             metrics_enabled=True,
             db_auto_schema=True,
-            enable_builtin_agents=False,
+            dev_mode=False,
         )
 
         @asynccontextmanager
@@ -355,7 +355,7 @@ class TestMetricsDisabled:
             db_path=str(tmp_path / "test.db"),
             metrics_enabled=False,
             db_auto_schema=True,
-            enable_builtin_agents=False,
+            dev_mode=False,
         )
 
         @asynccontextmanager

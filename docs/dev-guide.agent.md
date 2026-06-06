@@ -313,7 +313,7 @@ Both `config_provider` and `secret_resolver` use the same `ConfigProvider` proto
 
 Required fields (no defaults): none (all fields have defaults)
 
-Optional fields: `db_auto_schema`, `cors_origins`, `enable_builtin_agents`, `dev_mode`, `enable_eval`, `eval_results_dir`, `log_level`
+Optional fields: `db_auto_schema`, `cors_origins`, `dev_mode`, `enable_eval`, `eval_results_dir`, `log_level`
 
 > **Note:** `llm_api_key`, `llm_base_url`, `llm_model` were removed from `ConfigSchema`. LLM configuration is now handled by `LLMProviderRegistry` with per-provider defaults via env vars `ORCH_PROVIDER_{NAME}__{KEY}` (e.g. `ORCH_PROVIDER_OPENAI__API_KEY=sk-xxx`).
 
@@ -354,7 +354,7 @@ When an adapter is not injected:
 |---------|---------|----------|
 | `token_verifier` | `_DefaultAuthProvider` | Reads `X-User-Id` header or `x-user-id` cookie; no signature check |
 | `permission_checker` | `_DefaultAuthProvider` (shared) | Built-in permission table for `admin`/`member`/`user` |
-| `registry_provider` | `InMemoryManagementProvider` | Empty when `enable_builtin_agents=false`, demo data when true |
+| `registry_provider` | `InMemoryManagementProvider` | Empty when `dev_mode=false`, demo data when true |
 | `management_provider` | `InMemoryManagementProvider` (same instance as `registry_provider`) | CRUD API available only when `registry_provider` implements `MetadataManager` |
 | `outbound_auth_provider` | `_DefaultOutboundAuthProvider` | Forwards all non-hop-by-hop headers |
 | `m2m_auth_provider` | `_DefaultM2MAuthProvider` | Trusts `X-User-Id` header only |
