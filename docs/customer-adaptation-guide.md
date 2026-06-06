@@ -50,7 +50,7 @@ uvicorn mh_orchestration_service.main:app --port 8005
 
 内置的默认数据：
 - **Agent**: `code-reviewer`, `writer`
-- **Tool**: `web_search`
+- **Tool**: `web_search`, `calculator`, `handoff`, `discover_agents`, `show_ui_meta`, `general_visualization`, `stop_agent`
 - **Scenario**: `code_review`, `writing`
 
 ### 内置 Agent 开关
@@ -67,6 +67,8 @@ uvicorn mh_orchestration_service.main:app --port 8005
 | `writer` | Writing Assistant | 写作助手 | 撰写文章、邮件、报告等内容 |
 
 > 内置 agent 的 system_prompt 支持中英文，根据前端传来的 `Accept-Language` 自动适配。
+> 
+> 内置 Tool 包括 `stop_agent` — 可用于在 Tool 执行完成后立即停止 Agent 循环，不再调用 LLM 生成后续回复。详见 `minimal-harness` 文档。
 
 ---
 
