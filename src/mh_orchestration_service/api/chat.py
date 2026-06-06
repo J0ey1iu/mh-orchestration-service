@@ -294,27 +294,29 @@ async def _stream_events(
     scenario_id: str = "",
     trace_id: str = "",
 ) -> AsyncIterator[str]:
-    runtime, agent_registry, tool_registry, _ = await create_runtime(
-        request=request,
-        user_id=user_id,
-        agent_name=agent_name,
-        tool_names=tool_names,
-        session_store=store,
-        session_id=memory_id,
-        scenario_id=scenario_id,
-        trace_id=trace_id,
-    )
-
-    task, stop_event, queue = await runtime.run(
-        user_input=[{"type": "text", "text": message}],
-        agent_metadata_id=agent_name,
-        memory_id=memory_id,
-        tool_names=tool_names,
-    )
-
     collected_messages: list[dict] = []
+    task = None
+    stop_event = None
 
     try:
+        runtime, agent_registry, tool_registry, _ = await create_runtime(
+            request=request,
+            user_id=user_id,
+            agent_name=agent_name,
+            tool_names=tool_names,
+            session_store=store,
+            session_id=memory_id,
+            scenario_id=scenario_id,
+            trace_id=trace_id,
+        )
+
+        task, stop_event, queue = await runtime.run(
+            user_input=[{"type": "text", "text": message}],
+            agent_metadata_id=agent_name,
+            memory_id=memory_id,
+            tool_names=tool_names,
+        )
+
         while True:
             event = await queue.get()
             if event is None:
@@ -346,8 +348,10 @@ async def _stream_events(
         logger.exception("Chat stream error")
         yield _format_sse("Error", {"message": "An internal error occurred."})
     finally:
-        stop_event.set()
-        await task
+        if stop_event is not None:
+            stop_event.set()
+        if task is not None:
+            await task
 
         if collected_messages:
             await session.add_message(
