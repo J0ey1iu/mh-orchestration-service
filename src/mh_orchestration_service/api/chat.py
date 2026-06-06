@@ -125,7 +125,12 @@ def _serialize_event(event: Any) -> dict[str, Any]:
         case ExecutionStart():
             return {"tool_calls": event.tool_calls}
         case ExecutionEnd():
-            return {"results": event.results, "error": event.error}
+            return {
+                "results": event.results,
+                "error": event.error,
+                "should_stop": event.should_stop,
+                "response_text": event.response_text,
+            }
         case ToolStart():
             return {
                 "tool_call": event.tool_call,
@@ -146,6 +151,7 @@ def _serialize_event(event: Any) -> dict[str, Any]:
                     "tool_call": event.tool_call,
                     "result": _serialize_result(event.result.content),
                     "meta": event.result.meta,
+                    "stop": event.result.stop,
                 }
             return {
                 "tool_call": event.tool_call,

@@ -198,6 +198,23 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
         },
         "endpoint_url": "/api/v1/tools/general_visualization/execute",
     },
+    {
+        "name": "stop_agent",
+        "display_name": "Stop Agent",
+        "display_name_locale": '{"zh":"停止执行","en":"Stop Agent"}',
+        "description": "Stop the agent execution loop after receiving the tool result",
+        "description_locale": '{"zh":"在收到工具执行结果后停止agent循环","en":"Stop the agent execution loop after receiving the tool result"}',
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "The final message to return to the user",
+                }
+            },
+        },
+        "endpoint_url": "/api/v1/tools/stop_agent/execute",
+    },
 ]
 
 BUILTIN_SCENARIOS: list[dict[str, Any]] = [
@@ -218,6 +235,7 @@ BUILTIN_SCENARIOS: list[dict[str, Any]] = [
                     "web_search",
                     "show_ui_meta",
                     "general_visualization",
+                    "stop_agent",
                 ],
             }
         ],

@@ -691,3 +691,34 @@ async def general_visualization_execute(
             )
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.post("/stop_agent/execute")
+async def stop_agent_execute(
+    request: Request,
+    body: dict[str, Any],
+    accept_language: str | None = Header(None, alias="Accept-Language"),
+    app_id: str = Depends(verify_m2m_request),
+):
+    args = body.get("args", {})
+    message = args.get("message", "Agent stopped by tool request")
+    locale = args.get("locale") or parse_locale(accept_language)
+    is_zh = locale == "zh"
+    progress_msg = (
+        "执行完成，标记 agent 停止..." if is_zh else "Done, stopping agent..."
+    )
+
+    async def event_stream():
+        yield _sse_line(
+            "tool_progress",
+            {"message": progress_msg},
+        )
+        yield _sse_line(
+            "tool_end",
+            {
+                "content": message,
+                "__stop": True,
+            },
+        )
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
