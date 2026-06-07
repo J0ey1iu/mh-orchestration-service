@@ -296,9 +296,9 @@ from minimal_harness.adapters import MetadataManager  # 统一读写协议
 
 
 # ── 日志 ────────────────────────────────────────
-logger = logging.getLogger("my_app")
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.DEBUG)
+root = logging.getLogger()
+root.addHandler(logging.StreamHandler())
+root.setLevel(logging.DEBUG)
 
 
 # ── 配置中心 ────────────────────────────────────
@@ -383,7 +383,6 @@ app = create_app(
     outbound_auth_provider=outbound_auth,
     llm_extra_headers_provider=llm_extra_headers,  # Callable，非 LifespanHook
     llm_provider_registry=my_provider_registry,     # LifespanHook
-    logger=logger,
 )
 ```
 

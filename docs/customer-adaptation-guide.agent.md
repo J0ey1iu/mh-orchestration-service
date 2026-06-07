@@ -189,7 +189,6 @@ def create_app(
     permission_checker: PermissionChecker | None = None,
     credential_verifier: CredentialVerifier | None = None,
     registry_provider: RegistryProvider | None = None,
-    logger: logging.Logger | None = None,
     llm_provider_factory: Callable[[], LLMProvider] | None = None,
 ) -> FastAPI:
 ```
@@ -259,7 +258,6 @@ app = create_app(
     permission_checker=MyPermissionChecker(),
     credential_verifier=MyCredentialVerifier(),  # optional
     registry_provider=registry,                  # optional
-    logger=logger,                               # optional
 )
 ```
 

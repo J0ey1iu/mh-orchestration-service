@@ -639,14 +639,14 @@ async def my_m2m_auth_provider(app: FastAPI):
 settings = asyncio.run(config_mgr.resolve(ConfigSchema, prefix="ORCH"))
 
 
-# ── 4. 自定义 Logger（可选） ─────────────────────
-logger = logging.getLogger("my_app")
+# ── 4. 配置 root logger（可选，不配置则使用 SDK 内置默认日志） ──
+root = logging.getLogger()
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter(
     "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 ))
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
+root.addHandler(handler)
+root.setLevel(logging.DEBUG)
 
 
 # ── 5. 组装应用 ──────────────────────────────────
@@ -657,7 +657,6 @@ app = create_app(
     registry_provider=my_registry_provider,
     outbound_auth_provider=my_outbound_auth_provider,
     m2m_auth_provider=my_m2m_auth_provider,
-    logger=logger,
 )
 ```
 
@@ -1207,6 +1206,6 @@ async def main():
 2. **使用 ConfigMapping** — 避免在代码中硬编码配置 key，将所有 key 集中管理
 3. **生产环境务必注入所有 Adapter** — 不要依赖内置默认实现
 4. **修改 `ORCH_TOKEN_SECRET_KEY`** — 默认值仅用于开发，生产环境必须改为你的密钥
-5. **日志** — 注入自定义 logger 后，`orchestration.*` 下的所有日志会继承你的 handler。logger 不是 lifespan hook，它作为普通同步参数直接传入 `create_app()`
+5. **日志** — 如需自定义日志输出，在调用 `create_app()` 前自行配置 `logging.getLogger()`（root logger）。SDK 提供内置默认日志配置。
 6. **审计** — 审计日志通过 `orchestration.audit` logger 输出（INFO 级别），可在日志系统中单独采集
 7. **所有 Config 类必须继承 `pydantic.BaseModel`** — `ConfigManager` 在运行时依赖 `model_fields` 和 Pydantic 构造器

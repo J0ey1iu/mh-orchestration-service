@@ -49,14 +49,14 @@ from my_adapters import (
 config_mgr = ConfigManager()
 settings = asyncio.run(config_mgr.resolve(ConfigSchema, prefix="ORCH"))
 
-# 2. 自定义 logger
-logger = logging.getLogger("my_app")
+# 2. 配置 root logger（可选，不配置则使用 SDK 内置默认日志）
+root = logging.getLogger()
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter(
     "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 ))
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
+root.addHandler(handler)
+root.setLevel(logging.DEBUG)
 
 # 3. 定义 Adapter LifespanHook（应用启动时注入）
 @asynccontextmanager
@@ -80,7 +80,6 @@ app = create_app(
     token_verifier=token_verifier,
     permission_checker=permission_checker,
     registry_provider=registry_provider,
-    logger=logger,
 )
 ```
 

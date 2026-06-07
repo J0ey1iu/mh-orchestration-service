@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import warnings
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable
@@ -11,10 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from minimal_harness.adapters import MetadataManager, RegistryProvider
 from minimal_harness.auth import PermissionChecker, UserAuthProvider
-from minimal_harness.client.logging_setup import (
-    adopt_logger,
-    setup_service_logging,
-)
+from minimal_harness.client.logging_setup import setup_service_logging
 from minimal_harness.llm.factory import register_builtin_providers
 from minimal_harness.llm.llm import LLMProvider, LLMProviderRegistry
 from minimal_harness.types import ExtraHeadersProvider
@@ -235,8 +233,8 @@ def create_app(
 
     Args:
         settings: 已解析的框架配置（由 ConfigManager.resolve() 或手动构建）。
-        logger: 自定义 logger。传入后 ``orchestration.*`` 下所有日志
-                继承其 handler 和级别。
+        logger: （已弃用）自定义 logger。请改为在调用 ``create_app()``
+            之前自行配置 ``logging.getLogger()``（root logger）。
         token_verifier: 认证适配器 hook。
         permission_checker: 权限校验适配器 hook。
         management_provider: 统一数据管理适配器 hook。
@@ -249,10 +247,14 @@ def create_app(
             用于自定义 provider 注册（per-agent provider 选择）。
         lifespan_hooks: 通用生命周期钩子，在 per-adapter hooks 之后执行。
     """
-    if logger is None:
-        setup_service_logging()
-    else:
-        adopt_logger(logger)
+    if logger is not None:
+        warnings.warn(
+            "create_app(logger=...) is deprecated. "
+            "Configure logging.getLogger() (root logger) before calling create_app() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    setup_service_logging()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
