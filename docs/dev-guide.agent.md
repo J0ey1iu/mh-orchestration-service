@@ -127,7 +127,7 @@ class M2MAuthProvider(Protocol):
 
 - Protects `POST /api/v1/agents/{name}/run` and `POST /api/v1/tools/*/execute`
 - Returns `app_id` (str) on success, `None` for 401
-- Default: trusts `X-User-Id` header (development only — MUST replace in production)
+- Default: allows all requests, returns `"default"` (development only — MUST replace in production)
 
 ### 2.6 ConfigProvider (`from mh_orchestration_service import ConfigProvider`)
 
@@ -301,7 +301,7 @@ class ConfigManager:
 ```
 
 **Resolution order per field:**
-1. Env var `{PREFIX}_{FIELD}` (e.g. `ORCH_TOKEN_SECRET_KEY`) — highest
+1. Env var `{PREFIX}_{FIELD}` (e.g. `ORCH_DB_PATH`) — highest
 2. `secret_resolver.get()` (a `ConfigProvider` instance, if field in `sensitive_fields`)
 3. `config_provider.get()` (a `ConfigProvider` instance, if field NOT in `sensitive_fields`)
 4. Model default value (optional fields only)
@@ -311,9 +311,20 @@ Both `config_provider` and `secret_resolver` use the same `ConfigProvider` proto
 
 ### 4.2 ConfigSchema (`from mh_orchestration_service import ConfigSchema`)
 
-Required fields (no defaults): none (all fields have defaults)
+All fields have defaults:
 
-Optional fields: `db_auto_schema`, `cors_origins`, `dev_mode`, `enable_eval`, `eval_results_dir`, `log_level`
+| Field | Type | Default | Env var |
+|-------|------|---------|---------|
+| `db_path` | str | `"./sessions.db"` | `ORCH_DB_PATH` |
+| `db_auto_schema` | bool | `false` | `ORCH_DB_AUTO_SCHEMA` |
+| `cors_origins` | list[str] | `[]` | `ORCH_CORS_ORIGINS` |
+| `dev_mode` | bool | `false` | `ORCH_DEV_MODE` |
+| `enable_eval` | bool | `true` | `ORCH_ENABLE_EVAL` |
+| `eval_results_dir` | str | `"./eval_results"` | `ORCH_EVAL_RESULTS_DIR` |
+| `log_level` | str | `"INFO"` | `ORCH_LOG_LEVEL` (declared; logging via `MH_LOG_LEVEL` or manual setup) |
+| `verify_agent_tool_ssl` | bool | `false` | `ORCH_VERIFY_AGENT_TOOL_SSL` |
+| `metrics_enabled` | bool | `false` | `ORCH_METRICS_ENABLED` |
+| `metrics_push_interval` | int | `60` | `ORCH_METRICS_PUSH_INTERVAL` |
 
 > **Note:** `llm_api_key`, `llm_base_url`, `llm_model` were removed from `ConfigSchema`. LLM configuration is now handled by `LLMProviderRegistry` with per-provider defaults via env vars `ORCH_PROVIDER_{NAME}__{KEY}` (e.g. `ORCH_PROVIDER_OPENAI__API_KEY=sk-xxx`).
 
@@ -357,7 +368,7 @@ When an adapter is not injected:
 | `registry_provider` | `InMemoryManagementProvider` | Empty when `dev_mode=false`, demo data when true |
 | `management_provider` | `InMemoryManagementProvider` (same instance as `registry_provider`) | CRUD API available only when `registry_provider` implements `MetadataManager` |
 | `outbound_auth_provider` | `_DefaultOutboundAuthProvider` | Forwards all non-hop-by-hop headers |
-| `m2m_auth_provider` | `_DefaultM2MAuthProvider` | Trusts `X-User-Id` header only |
+| `m2m_auth_provider` | `_DefaultM2MAuthProvider` | Allows all requests — only for dev |
 | `llm_provider_factory` | `OpenAILLMProvider` | Created from `llm_provider_registry.create("openai", {})` |
 | `llm_provider_registry` | `LLMProviderRegistry` | Built-in `openai`, `anthropic`, `openai_viz` registered; defaults from `ORCH_PROVIDER_*` env vars |
 | `llm_extra_headers_provider` | `None` | No extra headers injected |

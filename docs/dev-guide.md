@@ -416,7 +416,7 @@ uvicorn my_app:app --host 0.0.0.0 --port 8005 --workers 4
 | `dev_mode` | `ORCH_DEV_MODE` | 否 | 默认 false，开发模式（内置 agent、前端、SSO） |
 | `enable_eval` | `ORCH_ENABLE_EVAL` | 否 | 默认 true，是否暴露评测接口 |
 | `eval_results_dir` | `ORCH_EVAL_RESULTS_DIR` | 否 | 默认 `./eval_results` |
-| `log_level` | `ORCH_LOG_LEVEL` | 否 | 默认 `INFO` |
+| `log_level` | `ORCH_LOG_LEVEL` | 否 | 默认 `INFO`（ConfigSchema 声明字段，但日志通过 `MH_LOG_LEVEL` 环境变量或自行配置 root logger 控制） |
 
 > `llm_api_key`/`llm_base_url`/`llm_model` 已从 `ConfigSchema` 移除。LLM 配置改为通过 `LLMProviderRegistry` + 环境变量 `ORCH_PROVIDER_{NAME}__{KEY}` 设置。例如 `ORCH_PROVIDER_OPENAI__API_KEY=sk-xxx`。
 
@@ -501,9 +501,8 @@ db_svc.set_session_store_factory(lambda: MySessionStore(my_db_conn))
 1. **先实现 MetadataManager** — 统一读写协议，管理面 API 和运行时 API 共享同一数据源
 2. **所有 Adapter 都用 LifespanHook 注入** — 不要依赖内置默认实现上生产
 3. **Config 类必须继承 pydantic.BaseModel** — ConfigManager 依赖 `model_fields`
-4. **ORCH_TOKEN_SECRET_KEY 必须修改** — 默认仅用于开发
-5. **内置 agent 仅用于演示** — 生产环境 `ORCH_DEV_MODE=false`
-6. **SSE 流协议** — Chat API 使用 SSE 流式推送事件，前端监听 `message` 事件
-7. **日志审计** — 审计日志通过 `orchestration.audit` logger（INFO 级别）输出
-8. **LLM 配置通过 ORCH_PROVIDER** — 使用环境变量 `ORCH_PROVIDER_{NAME}__{KEY}` 而不是旧的 `ORCH_LLM_*` 变量
-9. **ToolGenerator/AgentGenerator 共用 llm_provider_factory** — 如果替换了 LLM，自定义生成器需调用 `set_llm_factory()`
+4. **生产环境务必关闭 dev_mode** — 默认 `false`，内置 agent 仅用于演示
+5. **SSE 流协议** — Chat API 使用 SSE 流式推送事件，前端监听 `message` 事件
+6. **日志审计** — 审计日志通过 `orchestration.audit` logger（INFO 级别）输出
+7. **LLM 配置通过 ORCH_PROVIDER** — 使用环境变量 `ORCH_PROVIDER_{NAME}__{KEY}` 而不是旧的 `ORCH_LLM_*` 变量
+8. **ToolGenerator/AgentGenerator 共用 llm_provider_factory** — 如果替换了 LLM，自定义生成器需调用 `set_llm_factory()`

@@ -47,7 +47,7 @@ action:resource:target
 
 ### 1. 依赖注入式检查 — `require_permission`
 
-文件: `api/dependencies.py:22`
+文件: `api/dependencies.py:31`
 
 ```python
 def require_permission(permission: str):

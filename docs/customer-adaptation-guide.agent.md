@@ -60,29 +60,120 @@ class PermissionChecker(Protocol):
 - Use `match_permission()` from `minimal_harness.auth.protocols` to evaluate wildcards
 - Return `True` if permission string matches user's permissions
 
-### 2.3 RegistryProvider (import: `from minimal_harness.adapters import RegistryProvider`)
+### 2.3 MetadataManager (import: `from minimal_harness.adapters import MetadataManager`)
+
+This is the **recommended** unified read/write protocol. It extends `RegistryProvider` with CRUD methods.
 
 ```python
 @runtime_checkable
-class RegistryProvider(Protocol):
+class MetadataManager(RegistryProvider, Protocol):
+    # ── Read (inherited from RegistryProvider) ──
     async def get_agent(self, name: str) -> dict[str, Any] | None: ...
     async def list_agents(self) -> list[dict[str, Any]]: ...
     async def get_tool(self, name: str) -> dict[str, Any] | None: ...
     async def list_tools(self) -> list[dict[str, Any]]: ...
     async def get_scenario(self, scenario_id: str) -> dict[str, Any] | None: ...
     async def list_scenarios(self) -> list[dict]: ...
+
+    # ── Agent CRUD ──
+    async def create_agent(self, agent: dict[str, Any]) -> dict[str, Any]: ...
+    async def update_agent(self, name: str, agent: dict[str, Any]) -> dict[str, Any]: ...
+    async def delete_agent(self, name: str) -> None: ...
+
+    # ── Tool CRUD ──
+    async def create_tool(self, tool: dict[str, Any]) -> dict[str, Any]: ...
+    async def update_tool(self, name: str, tool: dict[str, Any]) -> dict[str, Any]: ...
+    async def delete_tool(self, name: str) -> None: ...
+
+    # ── Scenario CRUD ──
+    async def create_scenario(self, scenario: dict[str, Any]) -> dict[str, Any]: ...
+    async def update_scenario(self, scenario_id: str, scenario: dict[str, Any]) -> dict[str, Any]: ...
+    async def delete_scenario(self, scenario_id: str) -> None: ...
+
+    # ── Relationships ──
+    async def add_scenario_agent(self, scenario_id, agent_name, tool_names=None) -> dict: ...
+    async def remove_scenario_agent(self, scenario_id, agent_name) -> dict: ...
+    async def add_agent_tool(self, scenario_id, agent_name, tool_name) -> dict: ...
+    async def remove_agent_tool(self, scenario_id, agent_name, tool_name) -> dict: ...
+
+    async def close(self) -> None: ...
 ```
 
-**Contract:**
-- Agent dict shape: `{"name": str, "display_name": str, "description": str}`
-- Tool dict shape: `{"name": str, "display_name": str, "description": str, "parameters": {"type": "object", "properties": {...}, "required": [...]}}`
-- Scenario dict shape: `{"id": str, "name": str, "description": str, "agents": [{"name": str}]}`
+**Agent dict shape:**
+```json
+{
+  "name": "agent-id",
+  "display_name": "Human Name",
+  "display_name_locale": "{\"zh\":\"中文名\",\"en\":\"English\"}",
+  "description": "What this agent does",
+  "description_locale": "{\"zh\":\"...\",\"en\":\"...\"}",
+  "system_prompt": "You are an agent that...",
+  "system_prompt_locale": "{\"zh\":\"你是一个...\",\"en\":\"You are...\"}",
+  "endpoint_url": "/api/v1/agents/agent-id/run",
+  "provider": "openai",
+  "model": "gpt-4o",
+  "llm_config": {"temperature": 0.7, "max_tokens": 4096}
+}
+```
 
-**Contract:**
-- Return `UserIdentity` if password matches, `None` otherwise
-- If not implemented, `POST /api/v1/auth/login` returns 501
+> `endpoint_url` non-empty = remote agent (M2M endpoint); empty/absent = local execution.
+> `display_name_locale`, `description_locale`, `system_prompt_locale` are JSON-encoded strings (not dicts) for backward compatibility.
 
-### 2.5 ConfigProvider (optional; import: `from mh_orchestration_service.config_protocols import ConfigProvider`)
+**Tool dict shape:**
+```json
+{
+  "name": "tool-id",
+  "display_name": "Human Name",
+  "display_name_locale": "{\"zh\":\"...\",\"en\":\"...\"}",
+  "description": "What this tool does",
+  "description_locale": "{\"zh\":\"...\",\"en\":\"...\"}",
+  "parameters": {"type": "object", "properties": {...}, "required": [...]},
+  "endpoint_url": "/api/v1/tools/tool-id/execute",
+  "source_code": "async def run(**kwargs): ..."
+}
+```
+
+> `endpoint_url` non-empty = remote execution; empty = use `_fn` (local async function) or `source_code` (generated tool).
+
+**Scenario dict shape:**
+```json
+{
+  "id": "scenario-id",
+  "name": "Scenario Name",
+  "name_locale": "{\"zh\":\"...\",\"en\":\"...\"}",
+  "icon": "💻",
+  "description": "What this scenario does",
+  "description_locale": "{\"zh\":\"...\",\"en\":\"...\"}",
+  "agents": [{"name": "agent-id", "tool_names": ["tool-a", "tool-b"]}]
+}
+```
+
+### 2.4 OutboundAuthProvider (import: `from mh_orchestration_service import OutboundAuthProvider`)
+
+```python
+@runtime_checkable
+class OutboundAuthProvider(Protocol):
+    async def get_headers(self, request: Any, target_url: str, target_type: str) -> dict[str, str]: ...
+```
+
+- Called when orchestration makes outbound HTTP calls to remote agent/tool endpoints
+- Default: forwards all request headers except hop-by-hop headers
+- Implement to inject service-mesh auth (HMAC, mTLS, etc.)
+
+### 2.5 M2MAuthProvider (import: `from mh_orchestration_service import M2MAuthProvider`)
+
+```python
+@runtime_checkable
+class M2MAuthProvider(Protocol):
+    async def authenticate(self, request: Any) -> str | None: ...
+    async def get_identity_headers(self, request: Any, identity: str) -> dict[str, str]: ...
+    async def close(self) -> None: ...
+```
+
+- Protects `POST /api/v1/agents/{name}/run` and `POST /api/v1/tools/*/execute`
+- Returns `app_id` (str) on success, `None` for 401
+- Default: allows all requests, returns `"default"` (development only — MUST replace in production)
+### 2.6 ConfigProvider (optional; import: `from mh_orchestration_service import ConfigProvider`)
 
 ```python
 @runtime_checkable
@@ -92,7 +183,7 @@ class ConfigProvider(Protocol):
 ```
 
 **Contract:**
-- Input: remote config key (e.g. `"woa.orchestration.db.type"`)
+- Input: remote config key (e.g. `"woa.orchestration.db.path"`)
 - Output: config value string, or `None` if not found
 - Used for both non-sensitive configuration (Apollo, Nacos, Consul) and secrets (Vault, AWS Secrets Manager)
 - `SecretResolver` is a backward-compatible alias for `ConfigProvider`
@@ -106,26 +197,29 @@ class ConfigProvider(Protocol):
 
 ```python
 class ConfigSchema(BaseModel):
-    token_secret_key: str                     # REQUIRED — JWT signing secret
-    db_path: str = "./sessions.db"             # SQLite file path
+    db_path: str = "./sessions.db"            # SQLite file path
     db_auto_schema: bool = False              # Auto-create tables
     cors_origins: list[str] = Field(default_factory=list)
-    llm_api_key: str = ""
-    llm_base_url: str = ""
-    llm_model: str = ""
-    dev_mode: bool = False                  # Dev mode: built-in agents, dev routes, SPA static files
+    dev_mode: bool = False                    # Dev mode: built-in agents, dev routes, SPA static files
+    enable_eval: bool = True                  # Eval endpoints
+    eval_results_dir: str = "./eval_results"   # Eval results directory
+    log_level: str = "INFO"                   # Declared field. Logging is controlled via MH_LOG_LEVEL or manual setup
+    verify_agent_tool_ssl: bool = False       # SSL verification for remote agent/tool calls
+    metrics_enabled: bool = False             # Enable metrics collection
+    metrics_push_interval: int = 60           # Metrics push interval (seconds)
 ```
 
-**Constraint:** All Config classes (including custom ones) MUST inherit from `pydantic.BaseModel`. `ConfigManager.resolve()` accesses `model_fields` at runtime and calls the constructor with `**kwargs`.
+**All fields have defaults** — the service starts without any environment variables.
 
 **Resolution order** (per field, independent):
-1. Environment variable `{PREFIX}_{FIELD}` (highest priority, e.g. `ORCH_LLM_API_KEY`)
+1. Environment variable `{PREFIX}_{FIELD}` (highest priority, e.g. `ORCH_DB_PATH`)
 2. `secret_resolver` (a `ConfigProvider` instance, if field in `sensitive_fields`)
 3. `config_provider` (a `ConfigProvider` instance, if field NOT in `sensitive_fields`)
-4. Model default value (optional fields only)
-5. `ConfigError` raised (required fields only — those without defaults)
+4. Model default value
 
 Both `config_provider` and `secret_resolver` use the same `ConfigProvider` protocol; `SecretResolver` is a backward-compatible alias.
+
+> **LLM config is NOT in ConfigSchema.** LLM configuration uses `LLMProviderRegistry` with env vars `ORCH_PROVIDER_{NAME}__{KEY}` (e.g. `ORCH_PROVIDER_OPENAI__API_KEY=sk-xxx`).
 
 ### 3.2 ConfigMapping (import: `from mh_orchestration_service.config_mapping import ConfigMapping`)
 
@@ -185,21 +279,28 @@ cfg = await config_mgr.resolve(
 def create_app(
     *,
     settings: ConfigSchema,
-    token_verifier: UserAuthProvider | None = None,
-    permission_checker: PermissionChecker | None = None,
-    credential_verifier: CredentialVerifier | None = None,
-    registry_provider: RegistryProvider | None = None,
-    llm_provider_factory: Callable[[], LLMProvider] | None = None,
+    logger: logging.Logger | None = None,
+    token_verifier: LifespanHook | None = None,
+    permission_checker: LifespanHook | None = None,
+    management_provider: LifespanHook | None = None,
+    llm_provider_factory: LifespanHook | None = None,
+    outbound_auth_provider: LifespanHook | None = None,
+    m2m_auth_provider: LifespanHook | None = None,
+    llm_extra_headers_provider: ExtraHeadersProvider | None = None,
+    generated_tool_provider: LifespanHook | None = None,
+    generated_agent_provider: LifespanHook | None = None,
+    llm_provider_registry: LifespanHook | None = None,
+    lifespan_hooks: list[LifespanHook] | None = None,
 ) -> FastAPI:
 ```
 
 **Parameter rules:**
 - `settings` is REQUIRED
-- `token_verifier` / `permission_checker`: if both None → shared `_DefaultAuthProvider`; if one is None → its own `_DefaultAuthProvider` instance
-- `credential_verifier` None → `_DefaultCredentialVerifier` (hardcoded users)
-- `registry_provider` None → `RegistryClient(enable_builtin=settings.dev_mode)` (empty when dev_mode=false, demo data when true)
-- `llm_provider_factory` None → `partial(OpenAILLMProvider, ...)` from env config via `AsyncOpenAI` client
-- `logger` None → Python root logger
+- All adapter hooks are LifespanHooks (`Callable[[FastAPI], AbstractAsyncContextManager[None]]`) — they receive the app and override their slot on `app.state.adapters`
+- `llm_extra_headers_provider` is NOT a LifespanHook — it's a direct `Callable[[], Awaitable[dict[str, str]]]`
+- `management_provider` is the primary hook for agent/tool/scenario data (replaces the old `registry_provider` parameter)
+- `logger` is deprecated — configure `logging.getLogger()` (root logger) before calling `create_app()` instead
+- Any `None` adapter gets a built-in default
 
 ### 4.2 AppState (import: `from mh_orchestration_service.app import AppState`)
 
@@ -210,58 +311,74 @@ class AppState:
     settings: ConfigSchema
     token_verifier: UserAuthProvider
     permission_checker: PermissionChecker
-    credential_verifier: CredentialVerifier | None
     registry_provider: RegistryProvider | None
-    logger: logging.Logger | None
+    management_provider: MetadataManager | None
     llm_provider_factory: Callable[[], LLMProvider] | None
+    outbound_auth_provider: OutboundAuthProvider | None
+    m2m_auth_provider: M2MAuthProvider | None
+    llm_extra_headers_provider: ExtraHeadersProvider | None
+    generated_tool_provider: ToolGenerator | None
+    generated_agent_provider: AgentGenerator | None
+    llm_provider_registry: LLMProviderRegistry | None
 ```
 
 ---
 
 ## 5. Assembly Procedure (Code Agent MUST follow this order)
 
-### Step 1: Resolve framework config
+### Step 1: Create ConfigManager
 
 ```python
 config_mgr = ConfigManager(                     # no args = env-only mode
-    config_provider=MyConfigProvider(),          # optional, ConfigProvider instance
-    secret_resolver=MySecretResolver(),          # optional, also ConfigProvider
+    config_provider=MyConfigProvider(),          # optional
+    secret_resolver=MySecretResolver(),          # optional
 )
 ```
 
-### Step 2: Resolve adapter-specific config (if needed)
+### Step 2: Resolve adapter-specific config (if needed, inside lifespan hooks)
 
 ```python
 class MyRegistryConfig(BaseModel):
     api_url: str = ""
     api_key: str = ""
-
-cfg = asyncio.run(config_mgr.resolve(
-    MyRegistryConfig,
-    prefix="my.registry",
-    sensitive_fields={"api_key"},
-))
 ```
 
-### Step 3: Instantiate adapters with resolved config
+### Step 3: Define LifespanHooks for each adapter
 
 ```python
-registry = MyRegistry(api_url=cfg.api_url, api_key=cfg.api_key)
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+
+@asynccontextmanager
+async def my_management_provider(app: FastAPI):
+    cfg = await config_mgr.resolve(
+        MyRegistryConfig, prefix="my.registry", sensitive_fields={"api_key"}
+    )
+    app.state.adapters.management_provider = MyRegistry(
+        api_url=cfg.api_url, api_key=cfg.api_key
+    )
+    yield
 ```
 
-### Step 4: Assemble app
+### Step 4: Resolve framework config
+
+```python
+settings = asyncio.run(config_mgr.resolve(ConfigSchema, prefix="ORCH"))
+```
+
+### Step 5: Assemble app
 
 ```python
 app = create_app(
     settings=settings,
-    token_verifier=MyUserAuthProvider(),
-    permission_checker=MyPermissionChecker(),
-    credential_verifier=MyCredentialVerifier(),  # optional
-    registry_provider=registry,                  # optional
+    token_verifier=my_token_verifier,
+    permission_checker=my_permission_checker,
+    management_provider=my_management_provider,
+    m2m_auth_provider=my_m2m_auth_provider,
 )
 ```
 
-### Step 5: Expose `app` at module level (for uvicorn)
+### Step 6: Expose `app` at module level (for uvicorn)
 
 ```python
 # my_app.py — uvicorn my_app:app
@@ -274,8 +391,8 @@ app = create_app(
 - On module import, `asyncio.run()` resolves config
 - `create_app()` sets up FastAPI with CORS, routers, middleware
 - On server startup (lifespan): `init_db(settings.database_url, auto_schema=settings.db_auto_schema)`
-- On server shutdown: close auth providers, credential verifier, registry client, database connection
-- **Required fields missing → `ConfigError` raised → process exits with error message listing missing keys`
+- On server shutdown: close built-in adapters, close database connection
+- All ConfigSchema fields have defaults — no env vars needed for basic startup
 
 ### Custom Database (Adapter)
 
@@ -287,24 +404,61 @@ from mh_orchestration_service.services import database as db_svc
 db_svc.set_session_store_factory(lambda: MySessionStore(my_db_conn))
 ```
 
-The factory accepts sync or async callables. See `mh_orchestration_service.database.BuiltinSessionStore` for reference, or [customer-adaptation-guide.md](customer-adaptation-guide.md) for a full PostgreSQL asyncpg example.
+The factory accepts sync or async callables. To fully replace the database layer, also call `db_svc.set_db()`.
 
 ---
 
 ## 7. Public API Surface (routes available after startup)
 
+### User-facing
+
 | Method | Path | Requires | Notes |
 |--------|------|----------|-------|
-| POST | `/api/v1/auth/login` | CredentialVerifier | 501 if not injected |
-| GET | `/api/v1/auth/me` | Valid token | Returns UserIdentity |
-| GET | `/api/v1/auth/sso/providers` | — | Returns configured SSO providers |
+| GET | `/api/v1/auth/me` | Valid token | Returns UserIdentity + permissions |
+| GET | `/api/v1/scenarios` | Valid token | Permission-filtered |
+| GET | `/api/v1/scenarios/{id}` | Valid token | Scenario detail |
 | POST | `/api/v1/chat/{memory_id}` | Valid token, session ownership | SSE streaming |
 | GET | `/api/v1/sessions` | Valid token | User's sessions |
-| GET | `/api/v1/sessions/{id}` | Valid token | Session detail + messages |
+| POST | `/api/v1/sessions` | Valid token | Create session |
+| GET | `/api/v1/sessions/{id}` | Valid token | Session detail |
+| GET | `/api/v1/sessions/{id}/messages` | Valid token | Session messages |
 | DELETE | `/api/v1/sessions/{id}` | Valid token | Soft delete |
-| GET | `/api/v1/scenarios` | Valid token | Permission-filtered |
 | GET | `/api/v1/agents` | Valid token | Permission-filtered |
 | GET | `/api/v1/tools` | Valid token | Permission-filtered |
+
+### Management (requires MetadataManager + manage:*:*)
+
+| Method | Path | Permission |
+|--------|------|------------|
+| GET/POST | `/api/v1/management/scenarios` | `manage:scene:*` |
+| GET/PUT/DELETE | `/api/v1/management/scenarios/{id}` | `manage:scene:*` |
+| POST/DELETE | `/api/v1/management/scenarios/{id}/agents` | `manage:scene:*` |
+| POST/DELETE | `/api/v1/management/scenarios/{id}/agents/{n}/tools` | `manage:scene:*` |
+| GET/POST | `/api/v1/management/agents` | `manage:agent:*` |
+| GET/PUT/DELETE | `/api/v1/management/agents/{n}` | `manage:agent:*` |
+| GET/POST | `/api/v1/management/tools` | `manage:tool:*` |
+| GET/PUT/DELETE | `/api/v1/management/tools/{n}` | `manage:tool:*` |
+| GET | `/api/v1/management/providers` | `manage:agent:*` |
+
+### M2M
+
+| Method | Path | Auth |
+|--------|------|------|
+| POST | `/api/v1/agents/{name}/run` | M2MAuthProvider |
+
+### AI Generation
+
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | `/api/v1/tool-generator/generate` | SSE stream |
+| GET/POST | `/api/v1/tool-generator/tools` | User's generated tools |
+| PUT/DELETE | `/api/v1/tool-generator/tools/{name}` | Update/delete |
+| POST | `/api/v1/tool-generator/tools/{name}/trial` | SSE trial |
+| POST | `/api/v1/tools/generated/{name}/execute` | M2M execute |
+| POST | `/api/v1/agent-generator/generate` | SSE stream |
+| GET/POST | `/api/v1/agent-generator/agents` | User's generated agents |
+| PUT/DELETE | `/api/v1/agent-generator/agents/{name}` | Update/delete |
+| POST | `/api/v1/agent-generator/agents/{name}/trial` | SSE trial |
 
 ---
 
@@ -312,9 +466,10 @@ The factory accepts sync or async callables. See `mh_orchestration_service.datab
 
 | Error Type | Source | Behavior |
 |---|---|---|
-| `ConfigError` | `ConfigManager.resolve()` | Process exits with list of missing required fields |
-| `RuntimeError` | `create_app()`/`get_db()` | Raised if `create_app()` not called before route handling |
+| `ConfigError` | `ConfigManager.resolve()` | Only if required fields missing (all ConfigSchema fields have defaults, so this is rare for framework config) |
+| `RuntimeError` | `get_db()` | Database accessed before `init_db()` |
 | 401 | Auth middleware | Invalid/missing token |
 | 403 | PermissionMiddleware | Missing required permission for tool/scenario |
-| 501 | CredentialVerifier missing | POST /api/v1/auth/login |
-| 404 | RegistryProvider | Agent/tool/scenario not found |
+| 403 | Chat endpoint | Session doesn't belong to user |
+| 404 | Various | Session/agent/tool/scenario not found |
+| 501 | Management API | `management_provider` is None (not injected) |
