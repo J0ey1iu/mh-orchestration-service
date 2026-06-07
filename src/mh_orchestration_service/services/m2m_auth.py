@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Protocol, runtime_checkable
+
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -41,7 +44,7 @@ class M2MAuthProvider(Protocol):
 
         Returns:
             Header 键值对字典，会写入出站 binding 的 ``headers`` 字段。
-            默认返回 ``{"X-User-Id": identity}``。
+            默认返回 ``{}``。
         """
         ...
 
@@ -51,25 +54,31 @@ class M2MAuthProvider(Protocol):
 
 
 class _DefaultM2MAuthProvider:
-    """默认实现——仅信任内部 loopback 调用。
+    """默认实现——开发者样例，仅 log 请求信息，不做任何鉴权控制。
 
-    仅识别 ``X-User-Id`` header，这是 chat 流程内部 tool 调用时
-    ``create_runtime()`` 自动携带的用户上下文标识。不作为鉴权依据，
-    仅用于开发/演示环境方便内部 loopback。
-
-    生产环境必须替换为实际的 M2M 鉴权实现（如 SOA），并在实现中
-    **忽略** ``X-User-Id`` header。
+    生产环境必须替换为实际的 M2M 鉴权实现（如 SOA）。
     """
 
     async def close(self) -> None:
         pass
 
     async def authenticate(self, request: Any) -> str | None:
-        x_user_id = request.headers.get("X-User-Id")
-        if x_user_id:
-            return x_user_id
-        return None
+        logger.info(
+            "M2M authenticate: method=%s url=%s headers=%s client=%s",
+            request.method,
+            str(request.url),
+            dict(request.headers),
+            request.client.host if request.client else None,
+        )
+        return "default"
 
     async def get_identity_headers(self, request: Any, identity: str) -> dict[str, str]:
-        """返回 ``{"X-User-Id": identity}``。"""
-        return {"X-User-Id": identity}
+        logger.info(
+            "M2M get_identity_headers: identity=%s method=%s url=%s headers=%s client=%s",
+            identity,
+            request.method,
+            str(request.url),
+            dict(request.headers),
+            request.client.host if request.client else None,
+        )
+        return {}
