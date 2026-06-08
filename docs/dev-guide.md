@@ -429,11 +429,11 @@ uvicorn my_app:app --host 0.0.0.0 --port 8005 --workers 4
 | GET | `/api/v1/auth/me` | 当前用户信息 |
 | GET | `/api/v1/scenarios` | 场景列表（按权限过滤） |
 | GET | `/api/v1/scenarios/{id}` | 场景详情 |
-| POST | `/api/v1/chat/{memory_id}` | SSE 流式聊天 |
-| GET | `/api/v1/sessions` | 用户 Session 列表 |
-| POST | `/api/v1/sessions` | 创建 Session |
-| GET | `/api/v1/sessions/{id}` | Session 详情 |
-| DELETE | `/api/v1/sessions/{id}` | 删除 Session |
+| POST | `/api/v1/chat/{memory_id}` | SSE 流式聊天（用户 Token 或 M2M 鉴权） |
+| GET | `/api/v1/sessions` | 用户 Session 列表（用户 Token 或 M2M 鉴权） |
+| POST | `/api/v1/sessions` | 创建 Session（用户 Token 或 M2M 鉴权） |
+| GET | `/api/v1/sessions/{id}` | Session 详情（用户 Token 或 M2M 鉴权） |
+| DELETE | `/api/v1/sessions/{id}` | 删除 Session（用户 Token 或 M2M 鉴权） |
 | GET | `/api/v1/agents` | Agent 列表（按权限过滤） |
 | POST | `/api/v1/agents/{name}/run` | M2M 鉴权的 Agent 执行 |
 | GET | `/api/v1/tools` | Tool 列表（按权限过滤） |

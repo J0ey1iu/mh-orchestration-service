@@ -27,8 +27,8 @@ from minimal_harness.types import (
 from pydantic import BaseModel
 
 from mh_orchestration_service.api.dependencies import (
-    get_current_permissions,
-    get_current_user,
+    resolve_request_identity,
+    resolve_request_permissions,
 )
 from mh_orchestration_service.api.locale import parse_locale
 from mh_orchestration_service.context import get_current_trace_id
@@ -202,8 +202,8 @@ async def chat(
     memory_id: str,
     body: ChatRequest,
     accept_language: str | None = Header(None, alias="Accept-Language"),
-    user_id: str = Depends(get_current_user),
-    user_perms: list[str] = Depends(get_current_permissions),
+    user_id: str = Depends(resolve_request_identity),
+    user_perms: list[str] = Depends(resolve_request_permissions),
 ) -> StreamingResponse:
     logger.debug(
         "INBOUND chat request — memory_id=%s user=%s locale=%s message_len=%d",

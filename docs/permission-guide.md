@@ -119,7 +119,8 @@ HTTP Request
   │         └─ permission_checker.check() → 403 if denied
   │
   ├─ POST /api/v1/chat/{id}
-  │    ├─ get_current_user
+  │    ├─ resolve_request_identity   → 用户 Token 或 M2M 鉴权，401 if both fail
+  │    ├─ resolve_request_permissions → 获取身份对应的权限列表
   │    ├─ session ownership check     → 403 if not owner
   │    └─ match_permission("use:tool:{name}")
   │         └─ 过滤可用工具列表

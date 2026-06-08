@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from mh_orchestration_service.api.dependencies import get_current_user
+from mh_orchestration_service.api.dependencies import resolve_request_identity
 from mh_orchestration_service.api.locale import parse_locale, resolve_display_name
 from mh_orchestration_service.services.database import get_session_store
 
@@ -23,7 +23,7 @@ class SessionCreateRequest(BaseModel):
 async def list_sessions(
     request: Request,
     scenario_id: str | None = Query(None),
-    user_id: str = Depends(get_current_user),
+    user_id: str = Depends(resolve_request_identity),
 ):
     logger.debug("INBOUND list_sessions — user=%s scenario_id=%s", user_id, scenario_id)
     locale = parse_locale(request.headers.get("accept-language"))
@@ -52,7 +52,7 @@ async def list_sessions(
 async def create_session(
     request: Request,
     body: SessionCreateRequest,
-    user_id: str = Depends(get_current_user),
+    user_id: str = Depends(resolve_request_identity),
 ):
     logger.debug(
         "INBOUND create_session — user=%s agent=%s scenario_id=%s",
@@ -96,7 +96,7 @@ async def create_session(
 async def get_session(
     request: Request,
     memory_id: str,
-    user_id: str = Depends(get_current_user),
+    user_id: str = Depends(resolve_request_identity),
 ):
     store = await get_session_store()
     session = await store.get_session(memory_id)
@@ -125,7 +125,7 @@ async def get_session(
 async def get_session_messages(
     request: Request,
     memory_id: str,
-    user_id: str = Depends(get_current_user),
+    user_id: str = Depends(resolve_request_identity),
 ):
     store = await get_session_store()
     session = await store.get_session(memory_id)
@@ -141,7 +141,7 @@ async def get_session_messages(
 async def delete_session(
     request: Request,
     memory_id: str,
-    user_id: str = Depends(get_current_user),
+    user_id: str = Depends(resolve_request_identity),
 ):
     store = await get_session_store()
     session = await store.get_session(memory_id)

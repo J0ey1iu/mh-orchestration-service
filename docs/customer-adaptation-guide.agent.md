@@ -417,12 +417,12 @@ The factory accepts sync or async callables. To fully replace the database layer
 | GET | `/api/v1/auth/me` | Valid token | Returns UserIdentity + permissions |
 | GET | `/api/v1/scenarios` | Valid token | Permission-filtered |
 | GET | `/api/v1/scenarios/{id}` | Valid token | Scenario detail |
-| POST | `/api/v1/chat/{memory_id}` | Valid token, session ownership | SSE streaming |
-| GET | `/api/v1/sessions` | Valid token | User's sessions |
-| POST | `/api/v1/sessions` | Valid token | Create session |
-| GET | `/api/v1/sessions/{id}` | Valid token | Session detail |
-| GET | `/api/v1/sessions/{id}/messages` | Valid token | Session messages |
-| DELETE | `/api/v1/sessions/{id}` | Valid token | Soft delete |
+| POST | `/api/v1/chat/{memory_id}` | Valid token or M2M auth, session ownership | SSE streaming |
+| GET | `/api/v1/sessions` | Valid token or M2M auth | User's sessions |
+| POST | `/api/v1/sessions` | Valid token or M2M auth | Create session |
+| GET | `/api/v1/sessions/{id}` | Valid token or M2M auth | Session detail |
+| GET | `/api/v1/sessions/{id}/messages` | Valid token or M2M auth | Session messages |
+| DELETE | `/api/v1/sessions/{id}` | Valid token or M2M auth | Soft delete |
 | GET | `/api/v1/agents` | Valid token | Permission-filtered |
 | GET | `/api/v1/tools` | Valid token | Permission-filtered |
 

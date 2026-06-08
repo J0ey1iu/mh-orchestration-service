@@ -21,7 +21,7 @@ orchestration 通过 LifespanHook 接口与外部系统解耦。所有适配器�
 | `PermissionChecker` | `_DefaultAuthProvider` — 内置权限表 | 实现 `check/get_permissions` |
 | `MetadataManager` | `InMemoryManagementProvider` — 内存数据（受 `dev_mode` 控制） | 实现读 (`get_agent/list_agents/...`) + CRUD (`create_agent/update_agent/...`) |
 | `OutboundAuthProvider` | `_DefaultOutboundAuthProvider` — 透传请求 header | 实现 `get_headers(request, url, type) → dict` |
-| `M2MAuthProvider` | `_DefaultM2MAuthProvider` — 允许所有请求 | 实现 `authenticate(request) → str\|None` |
+| `M2MAuthProvider` | `_DefaultM2MAuthProvider` — 允许所有请求 | 实现 `authenticate(request) → str\|None`（Chat/Sessions 端点也支持 M2M 鉴权回退） |
 | `ConfigProvider` | 无（仅环境变量） | 实现 `get(key) → str` 对接 Apollo/Nacos/Vault 等 |
 | `LLMProvider` | 通过 `LLMProviderRegistry` + 环境变量 `ORCH_PROVIDER_*` 配置 | 注入自定义 `llm_provider_factory` 或 `llm_provider_registry` LifespanHook |
 
@@ -108,12 +108,12 @@ agents = await adapters.management_provider.list_agents()
 | `/api/v1/auth/me` | GET | 当前用户信息（含权限列表） |
 | `/api/v1/scenarios` | GET | 场景列表（按权限过滤） |
 | `/api/v1/scenarios/{id}` | GET | 场景详情（含 Agent/Tool） |
-| `/api/v1/chat/{memory_id}` | POST | SSE 流式聊天（支持 `session_id` 续传） |
-| `/api/v1/sessions` | GET | 当前用户的 Session 列表（支持 `?scenario_id=` 过滤） |
-| `/api/v1/sessions` | POST | 创建 Session |
-| `/api/v1/sessions/{id}` | GET | Session 详情（含消息数） |
-| `/api/v1/sessions/{id}/messages` | GET | Session 消息历史 |
-| `/api/v1/sessions/{id}` | DELETE | 删除 Session |
+| `/api/v1/chat/{memory_id}` | POST | SSE 流式聊天（支持 `session_id` 续传）<br/>*支持用户 Token 或 M2M 鉴权* |
+| `/api/v1/sessions` | GET | 当前用户的 Session 列表（支持 `?scenario_id=` 过滤）<br/>*支持用户 Token 或 M2M 鉴权* |
+| `/api/v1/sessions` | POST | 创建 Session<br/>*支持用户 Token 或 M2M 鉴权* |
+| `/api/v1/sessions/{id}` | GET | Session 详情（含消息数）<br/>*支持用户 Token 或 M2M 鉴权* |
+| `/api/v1/sessions/{id}/messages` | GET | Session 消息历史<br/>*支持用户 Token 或 M2M 鉴权* |
+| `/api/v1/sessions/{id}` | DELETE | 删除 Session<br/>*支持用户 Token 或 M2M 鉴权* |
 | `/api/v1/agents` | GET | Agent 列表（按权限过滤，支持 `?scenario=` 过滤） |
 | `/api/v1/tools` | GET | Tool 列表（按权限过滤） |
 | `/health` | GET | 健康检查（始终返回 `{"status":"ok"}`） |

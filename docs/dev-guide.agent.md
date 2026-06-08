@@ -402,7 +402,7 @@ adapters.logger                  # logging.Logger
 
 ## 8. Chat SSE Stream Protocol
 
-`POST /api/v1/chat/{memory_id}` returns SSE events with `event:` and `data:` fields:
+`POST /api/v1/chat/{memory_id}`（支持用户 Token 或 M2M 鉴权）returns SSE events with `event:` and `data:` fields:
 
 ```
 event: AgentStart\ndata: {}\n\n

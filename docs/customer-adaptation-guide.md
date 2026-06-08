@@ -871,12 +871,12 @@ class SessionStoreProtocol(Protocol):
 | `GET /api/v1/auth/me` | GET | 当前用户信息 |
 | `GET /api/v1/scenarios` | GET | 获取场景列表（按权限过滤） |
 | `GET /api/v1/scenarios/{id}` | GET | 场景详情 |
-| `POST /api/v1/chat/{memory_id}` | POST | SSE 流式聊天（支持 `session_id` 续传） |
-| `GET /api/v1/sessions` | GET | 用户 Session 列表 |
-| `POST /api/v1/sessions` | POST | 创建 Session |
-| `GET /api/v1/sessions/{id}` | GET | Session 详情 |
-| `GET /api/v1/sessions/{id}/messages` | GET | Session 消息历史 |
-| `DELETE /api/v1/sessions/{id}` | DELETE | 删除 Session |
+| `POST /api/v1/chat/{memory_id}` | POST | SSE 流式聊天（支持 `session_id` 续传）<br/>*支持用户 Token 或 M2M 鉴权* |
+| `GET /api/v1/sessions` | GET | 用户 Session 列表<br/>*支持用户 Token 或 M2M 鉴权* |
+| `POST /api/v1/sessions` | POST | 创建 Session<br/>*支持用户 Token 或 M2M 鉴权* |
+| `GET /api/v1/sessions/{id}` | GET | Session 详情<br/>*支持用户 Token 或 M2M 鉴权* |
+| `GET /api/v1/sessions/{id}/messages` | GET | Session 消息历史<br/>*支持用户 Token 或 M2M 鉴权* |
+| `DELETE /api/v1/sessions/{id}` | DELETE | 删除 Session<br/>*支持用户 Token 或 M2M 鉴权* |
 | `GET /api/v1/agents` | GET | Agent 列表（按权限过滤，支持 `?scenario=` 过滤） |
 | `GET /api/v1/tools` | GET | Tool 列表（按权限过滤） |
 | `/docs` / `/redoc` | GET | Swagger / ReDoc 在线文档 |
