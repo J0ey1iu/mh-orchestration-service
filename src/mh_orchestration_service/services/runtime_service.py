@@ -84,6 +84,10 @@ async def _agent_binding(
         headers: dict[str, str] = {}
         if m2m_auth_provider is not None and request is not None and identity:
             headers = await m2m_auth_provider.get_identity_headers(request, identity)
+        if request is not None and "x-user-id" not in headers:
+            _xu = request.headers.get("x-user-id", "").strip()
+            if _xu:
+                headers["x-user-id"] = _xu
         extra_provider = None
         if outbound_auth_provider is not None and request is not None:
             extra_provider = _make_extra_headers_provider(
@@ -120,6 +124,10 @@ async def _tool_binding(
         headers: dict[str, str] = {}
         if m2m_auth_provider is not None and request is not None and identity:
             headers = await m2m_auth_provider.get_identity_headers(request, identity)
+        if request is not None and "x-user-id" not in headers:
+            _xu = request.headers.get("x-user-id", "").strip()
+            if _xu:
+                headers["x-user-id"] = _xu
         extra_provider = None
         if outbound_auth_provider is not None and request is not None:
             extra_provider = _make_extra_headers_provider(

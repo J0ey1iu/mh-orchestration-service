@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import Depends, HTTPException, Request
 
 from mh_orchestration_service.api.auth import get_user_id as _verify_user
+from mh_orchestration_service.context import set_current_user_id
+
+logger = logging.getLogger(__name__)
+
+_X_USER_ID_HEADER = "x-user-id"
 
 
 async def get_current_user(request: Request) -> str:
@@ -25,6 +32,39 @@ async def verify_m2m_request(request: Request) -> str:
     app_id = await adapters.m2m_auth_provider.authenticate(request)
     if app_id is None:
         raise HTTPException(status_code=401, detail="M2M authentication required")
+    return app_id
+
+
+async def resolve_m2m_identity(request: Request) -> str:
+    """Resolve effective user identity for M2M requests.
+
+    Authenticates the M2M caller, then checks for the ``x-user-id`` header
+    injected by the upstream outbound auth provider.  When present, the user
+    ID carried by that header is used for permission checks, session ownership,
+    and downstream identity propagation — matching the end-user's permission
+    set rather than the calling application's.
+
+    Falls back to *app_id* when ``x-user-id`` is absent (backwards compatible).
+
+    Sets the ``current_user_id`` ContextVar so ``get_current_user_id()`` works
+    in the M2M context as well.
+    """
+    adapters = request.app.state.adapters
+    app_id = await adapters.m2m_auth_provider.authenticate(request)
+    if app_id is None:
+        raise HTTPException(status_code=401, detail="M2M authentication required")
+
+    x_user_id = request.headers.get(_X_USER_ID_HEADER, "").strip()
+    if x_user_id:
+        logger.debug(
+            "M2M identity resolved via x-user-id: app_id=%s user_id=%s",
+            app_id,
+            x_user_id,
+        )
+        set_current_user_id(x_user_id)
+        return x_user_id
+
+    logger.debug("M2M identity resolved to app_id: app_id=%s", app_id)
     return app_id
 
 

@@ -24,7 +24,10 @@ from minimal_harness.types import (
     ToolStart,
 )
 
-from mh_orchestration_service.api.dependencies import verify_m2m_request
+from mh_orchestration_service.api.dependencies import (
+    resolve_m2m_identity,
+    verify_m2m_request,
+)
 from mh_orchestration_service.api.locale import (
     parse_locale,
     resolve_description,
@@ -52,7 +55,7 @@ async def discover_agents_execute(
     request: Request,
     body: dict[str, Any],
     accept_language: str | None = Header(None, alias="Accept-Language"),
-    app_id: str = Depends(verify_m2m_request),
+    user_id: str = Depends(resolve_m2m_identity),
 ):
     args = body.get("args", {})
     locale = args.get("locale") or parse_locale(accept_language)
@@ -67,14 +70,14 @@ async def discover_agents_execute(
                 adapters.management_provider,
                 adapters.permission_checker,
                 scenario_id,
-                app_id,
+                user_id,
             )
 
             user_perms: list[str] | None = None
             if scenario_agent_names is None:
                 if adapters.permission_checker:
                     user_perms = await adapters.permission_checker.get_permissions(
-                        app_id
+                        user_id
                     )
 
             agents = await adapters.management_provider.list_agents()
@@ -125,14 +128,13 @@ async def handoff_execute(
     request: Request,
     body: dict[str, Any],
     accept_language: str | None = Header(None, alias="Accept-Language"),
-    app_id: str = Depends(verify_m2m_request),
+    user_id: str = Depends(resolve_m2m_identity),
 ):
     args = body.get("args", {})
     target_agent_name = args.get("target_agent_name", "")
     context_summary = args.get("context_summary", "")
     task_description = args.get("task_description", "")
     locale = args.get("locale") or parse_locale(accept_language)
-    user_id = app_id
 
     if not target_agent_name:
 
