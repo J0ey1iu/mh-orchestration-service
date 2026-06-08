@@ -29,14 +29,16 @@ TRIAGE_SYSTEM_PROMPT_ZH = """你是一个通用助手，帮助用户处理各种
 对于一般的知识问答或信息查询，使用 web_search 工具在线搜索答案。"""
 
 CODE_REVIEW_SYSTEM_PROMPT = """You are a senior code reviewer. Analyze code changes for bugs, style issues, security vulnerabilities, and performance problems. Provide constructive, specific feedback with concrete fix suggestions. Be thorough but concise.
-Use discover_agents to find available agents when the user asks for something outside your expertise."""
+When the user's request is outside your expertise, use handoff to transfer to another agent. Use discover_agents to find available agents first."""
 
 CODE_REVIEW_SYSTEM_PROMPT_ZH = """你是一名资深代码审查专家。分析代码变更中的缺陷、风格问题、安全漏洞和性能问题。给出有建设性的具体反馈，并提供修复建议。做到既全面又简洁。
-当用户的需求超出你的专业范围时，使用 discover_agents 查找可用的智能体。"""
+当用户的需求超出你的专业范围时，使用 handoff 将任务移交给其他智能体。先使用 discover_agents 查找可用智能体。"""
 
-WRITER_SYSTEM_PROMPT = """You are a professional writing assistant. Help users craft clear, engaging, and well-structured content including articles, emails, reports, and creative writing. Provide thoughtful suggestions and improvements."""
+WRITER_SYSTEM_PROMPT = """You are a professional writing assistant. Help users craft clear, engaging, and well-structured content including articles, emails, reports, and creative writing. Provide thoughtful suggestions and improvements.
+When the user's request is outside your expertise, use handoff to transfer to another agent. Use discover_agents to find available agents first."""
 
-WRITER_SYSTEM_PROMPT_ZH = """你是一名专业的写作助手。帮助用户撰写清晰、有吸引力且结构良好的内容，包括文章、邮件、报告和创意写作。提供周到的建议和改进方案。"""
+WRITER_SYSTEM_PROMPT_ZH = """你是一名专业的写作助手。帮助用户撰写清晰、有吸引力且结构良好的内容，包括文章、邮件、报告和创意写作。提供周到的建议和改进方案。
+当用户的需求超出你的专业范围时，使用 handoff 将任务移交给其他智能体。先使用 discover_agents 查找可用智能体。"""
 
 
 BUILTIN_AGENTS: list[dict[str, Any]] = [
@@ -237,7 +239,24 @@ BUILTIN_SCENARIOS: list[dict[str, Any]] = [
                     "general_visualization",
                     "stop_agent",
                 ],
-            }
+            },
+            {
+                "name": "code-reviewer",
+                "tool_names": [
+                    "handoff",
+                    "discover_agents",
+                    "stop_agent",
+                ],
+            },
+            {
+                "name": "writer",
+                "tool_names": [
+                    "handoff",
+                    "discover_agents",
+                    "web_search",
+                    "stop_agent",
+                ],
+            },
         ],
     },
     {
@@ -247,7 +266,12 @@ BUILTIN_SCENARIOS: list[dict[str, Any]] = [
         "icon": "\U0001f4bb",
         "description": "Review code changes",
         "description_locale": '{"zh":"审查代码变更","en":"Review code changes"}',
-        "agents": [{"name": "code-reviewer", "tool_names": ["discover_agents"]}],
+        "agents": [
+            {
+                "name": "code-reviewer",
+                "tool_names": ["handoff", "discover_agents", "stop_agent"],
+            }
+        ],
     },
     {
         "id": "writing",
@@ -256,6 +280,16 @@ BUILTIN_SCENARIOS: list[dict[str, Any]] = [
         "icon": "\U0001f4dd",
         "description": "Help with writing",
         "description_locale": '{"zh":"协助写作","en":"Help with writing"}',
-        "agents": [{"name": "writer", "tool_names": ["web_search"]}],
+        "agents": [
+            {
+                "name": "writer",
+                "tool_names": [
+                    "handoff",
+                    "discover_agents",
+                    "web_search",
+                    "stop_agent",
+                ],
+            }
+        ],
     },
 ]

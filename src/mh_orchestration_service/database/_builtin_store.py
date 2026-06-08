@@ -110,7 +110,10 @@ class BuiltinSessionStore:
         now = _ts_ms()
         trace_id = uuid4().hex
 
-        audit_user_id = int(user_id)
+        try:
+            audit_user_id = int(user_id)
+        except (ValueError, TypeError):
+            audit_user_id = SYSTEM_USER_ID
 
         session = SimpleSession(
             session_id=sid,

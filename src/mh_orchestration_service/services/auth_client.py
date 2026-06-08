@@ -14,6 +14,15 @@ class _DefaultAuthProvider(UserAuthProvider, PermissionChecker):
     """
 
     DEFAULT_PERMISSIONS: dict[str, list[str]] = {
+        "default": [
+            "use:agent:*",
+            "use:tool:*",
+            "use:scene:*",
+            "use:eval:*",
+            "manage:scene:*",
+            "manage:agent:*",
+            "manage:tool:*",
+        ],
         "1": [
             "use:agent:*",
             "use:tool:*",

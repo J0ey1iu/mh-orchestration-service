@@ -5,12 +5,12 @@ import json
 import logging
 import time
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
 from minimal_harness.auth import match_permission
-from minimal_harness.memory import system_message, user_message
+from minimal_harness.memory import Message, system_message, user_message
 from minimal_harness.types import (
     AgentEnd,
     AgentStart,
@@ -157,7 +157,7 @@ async def handoff_execute(
 
             combined = f"Context: {context_summary}\n\nTask: {task_description}"
 
-            handoff_session_id = uuid.uuid4().hex
+            handoff_session_id = f"mem_{uuid.uuid4().hex[:12]}"
             store = await get_session_store()
             await store.create_session(
                 session_id=handoff_session_id,
@@ -165,6 +165,7 @@ async def handoff_execute(
                 user_id=user_id,
                 scenario_id=scenario_id,
                 display_name_locale=agent_meta.get("display_name_locale"),
+                transient=True,
             )
 
             lock = await acquire_session_lock(handoff_session_id)
@@ -207,6 +208,8 @@ async def handoff_execute(
                     },
                 )
 
+                collected_messages: list[dict] = []
+
                 while True:
                     try:
                         event = await asyncio.wait_for(queue.get(), timeout=0.5)
@@ -227,6 +230,7 @@ async def handoff_execute(
                         break
 
                     if isinstance(event, MessageEvent):
+                        collected_messages.append(event.message)
                         continue
 
                     if isinstance(event, AgentStart):
@@ -401,6 +405,28 @@ async def handoff_execute(
                             },
                         )
 
+                session = await store.get_session(handoff_session_id)
+                if session and collected_messages:
+                    await session.add_message(
+                        cast(
+                            Message,
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": combined}],
+                            },
+                        )
+                    )
+                    for msg in collected_messages:
+                        await session.add_message(cast(Message, msg))
+                    title = (
+                        task_description[:80]
+                        if task_description
+                        else f"Handoff to {target_agent_name}"
+                    )
+                    await store.save_memory(
+                        session.memory, handoff_session_id, extra={"title": title}
+                    )
+
                 yield _sse_line(
                     "tool_end",
                     {
@@ -421,7 +447,6 @@ async def handoff_execute(
                         await sub_task
                     except (asyncio.CancelledError, Exception):
                         pass
-                await store.delete_session(handoff_session_id)
                 await release_session_lock(handoff_session_id, lock)
 
         except Exception:
