@@ -1,0 +1,49 @@
+# Change Log
+
+## 0.1.2
+
+- feat: add `resolve_m2m_identity` for user-aware M2M permission checks
+- feat: support M2M auth fallback on chat and sessions APIs
+- feat: handoff message persistence, triage multi-agent coordination, M2M auth fixes
+- feat: add `stop_agent` test tool and wire `stop` signal through API
+- feat(handoff): enrich SSE events with chunk-level detail and streaming LLM content
+- feat: add `verify_agent_tool_ssl` config for remote SSL verification
+- feat(monitoring): add metrics collector, access log middleware, structured audit logging
+- feat: add AI agent generator with trial chat (symmetrical to tool generator)
+- feat: filter `discover_agents` by scenario and user permissions
+- feat: resolve localized `display_name` and pass `display_name_locale` on session create
+- refactor: merge `enable_builtin_agents` into `dev_mode`, extract dev runtime tools
+- refactor: `_DefaultM2MAuthProvider` to log-only mode, remove auth control
+- refactor(logging): deprecate `create_app()` logger param, use root logger instead
+- refactor(db): extract `SessionStore` as pluggable adapter, remove OpenGauss built-in
+- refactor: migrate auth to numeric user IDs and extract database module
+- revert: remove per-user counters — audit logs as source of truth
+- fix: improve chat SSE error handling — surface to user, preserve partial content
+- fix: wrap SSE `event_stream` generators with top-level try/except for exception logging
+- fix: exclude calling agent from `discover_agents` results
+- fix: pass `scenario_id` to `create_session` in handoff/execute
+- fix(metrics): add missing fields to `live_snapshot`, skip OPTIONS in middleware
+- docs: add `stop_agent` to built-in tools list and description
+- docs: sync dev-guide, customer-adaptation-guide, and README with current codebase
+- chore: remove unused backward-compat aliases
+- chore: add static directory for frontend SPA
+
+## 0.1.1
+
+- feat: add monitoring infrastructure — metrics collector, access log middleware, structured audit logging
+- feat: add per-user metrics counters with TTL eviction
+- refactor: extract SessionStore as pluggable adapter protocol
+
+## 0.1.0
+
+- feat: initial orchestration gateway service
+- feat: scenario loading, agent routing, SSE event streaming
+- feat: LifespanHook adapter layer (UserAuthProvider, PermissionChecker, MetadataManager, etc.)
+- feat: ConfigManager with env/ConfigCenter/SecretResolver resolution pipeline
+- feat: per-request context API (get_current_user_id, get_current_locale, etc.)
+- feat: built-in agents (triage, code-reviewer, writer) with dev mode
+- feat: management CRUD API for agents/tools/scenarios
+- feat: M2M authentication for agent/tool execution endpoints
+- feat: AI tool generator (LLM-powered tool creation)
+- feat: permission middleware for runtime tool call authorization
+- feat: built-in session store with SQLite backend

@@ -46,8 +46,8 @@ uv build
 
 ```
 delivery-package/
-├── minimal_harness-0.6.1a2-py3-none-any.whl
-├── mh_orchestration_service-0.1.0-py3-none-any.whl
+├── minimal_harness-<version>-py3-none-any.whl
+├── mh_orchestration_service-<version>-py3-none-any.whl
 └── customer-adaptation-guide.md   # 见 customer-adaptation-guide.md
 ```
 

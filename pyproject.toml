@@ -1,6 +1,6 @@
 [project]
 name = "mh-orchestration-service"
-version = "0.1.2a14"
+version = "0.1.2"
 description = "Orchestration Gateway — loads scenarios, routes agents, streams events. Built on top of minimal-harness."
 requires-python = ">=3.12"
 dependencies = [
@@ -11,7 +11,7 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
 
     "pydantic-settings>=2.0",
-    "minimal-harness>=0.6.2a16",
+    "minimal-harness>=0.6.2",
 ]
 
 [build-system]

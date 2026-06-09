@@ -88,8 +88,8 @@ uvicorn mh_orchestration_service.main:app --port 8005
 从我们提供的交付包中安装：
 
 ```bash
-pip install minimal_harness-0.6.1a2-py3-none-any.whl
-pip install mh_orchestration_service-0.1.0-py3-none-any.whl
+pip install minimal_harness-0.6.2a17-py3-none-any.whl
+pip install mh_orchestration_service-0.1.2a14-py3-none-any.whl
 ```
 
 验证安装：
