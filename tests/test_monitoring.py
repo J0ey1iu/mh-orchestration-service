@@ -70,27 +70,11 @@ class TestMetricsCollector:
         snap2 = c.http_request_duration_ms.snapshot()
         assert snap2 == []
 
-    def test_gauge_set_and_get(self):
-        c = MetricsCollector()
-        c.sessions_active.set(42)
-        assert c.sessions_active.get() == 42
-
-    def test_gauge_inc_dec(self):
-        c = MetricsCollector()
-        c.sessions_active.set(0)
-        c.sessions_active.inc()
-        c.sessions_active.inc(3)
-        assert c.sessions_active.get() == 4
-        c.sessions_active.dec(2)
-        assert c.sessions_active.get() == 2
-
     def test_live_snapshot(self):
         c = MetricsCollector()
-        c.sessions_active.set(5)
         snap = c.live_snapshot()
         assert "uptime_seconds" in snap
         assert "instance_id" in snap
-        assert snap["sessions_active"] == 5
 
     def test_set_get_collector(self):
         c = MetricsCollector()
@@ -336,7 +320,6 @@ class TestHealthEndpoints:
         data = response.json()
         assert "instance_id" in data
         assert "uptime_seconds" in data
-        assert "sessions_active" in data
         assert "http_requests_total" in data
 
 

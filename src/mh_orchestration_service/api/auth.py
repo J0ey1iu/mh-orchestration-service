@@ -30,21 +30,3 @@ async def get_user_id(request: Request) -> str:
     set_current_user_id(identity.user_id)
     request.scope["_user_id"] = identity.user_id
     return identity.user_id
-
-
-async def get_raw_auth_data(request: Request) -> str:
-    """Extract the raw authentication material from *request*.
-
-    Returns the ``Authorization: Bearer <token>`` value when present,
-    or the value of the first recognized cookie as a fallback.
-
-    Customer deployments using a custom ``UserAuthProvider`` may override
-    this function if downstream services need the raw credential.
-    """
-    auth = request.headers.get("authorization", "")
-    if auth.startswith("Bearer "):
-        return auth[len("Bearer ") :]
-    for key in ("sessionid", "sid", "token"):
-        if key in request.cookies:
-            return request.cookies[key]
-    return ""

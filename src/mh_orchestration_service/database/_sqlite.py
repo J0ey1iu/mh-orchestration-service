@@ -29,11 +29,6 @@ class SqliteDatabase(DatabaseProtocol):
         await self._conn.commit()
         return cursor.lastrowid or 0
 
-    async def execute_many_write(self, sql: str, params_list: list[list]) -> None:
-        assert self._conn is not None
-        await self._conn.executemany(sql, params_list)
-        await self._conn.commit()
-
     async def fetch_one(self, sql: str, params: list | None = None) -> dict | None:
         cursor = await self.execute(sql, params)
         row = await cursor.fetchone()

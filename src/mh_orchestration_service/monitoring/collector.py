@@ -98,28 +98,6 @@ class _LabeledHistogram:
             return result
 
 
-class _Gauge:
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._value: float = 0
-
-    def set(self, value: float) -> None:
-        with self._lock:
-            self._value = value
-
-    def inc(self, delta: float = 1.0) -> None:
-        with self._lock:
-            self._value += delta
-
-    def dec(self, delta: float = 1.0) -> None:
-        with self._lock:
-            self._value -= delta
-
-    def get(self) -> float:
-        with self._lock:
-            return self._value
-
-
 class MetricsCollector:
     def __init__(self, instance_id: str = "") -> None:
         self._instance_id = instance_id or os.environ.get(
@@ -136,7 +114,6 @@ class MetricsCollector:
         self.llm_request_duration_ms = _LabeledHistogram()
         self.agent_runs_total = _LabeledCounter()
         self.tool_calls_total = _LabeledCounter()
-        self.sessions_active = _Gauge()
 
     @property
     def instance_id(self) -> str:
@@ -179,14 +156,12 @@ class MetricsCollector:
             "llm_request_duration_ms": self.llm_request_duration_ms.snapshot(),
             "agent_runs_total": self.agent_runs_total.snapshot(),
             "tool_calls_total": self.tool_calls_total.snapshot(),
-            "sessions_active": self.sessions_active.get(),
         }
 
     def live_snapshot(self) -> dict[str, Any]:
         return {
             "instance_id": self._instance_id,
             "uptime_seconds": round(time.time() - self._start_time, 2),
-            "sessions_active": self.sessions_active.get(),
             "http_requests_total": self.http_requests_total.snapshot(),
             "http_request_duration_ms": self.http_request_duration_ms.snapshot(),
             "llm_requests_total": self.llm_requests_total.snapshot(),

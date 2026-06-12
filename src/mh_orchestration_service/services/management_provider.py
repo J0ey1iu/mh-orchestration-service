@@ -1,50 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 from mh_orchestration_service.services.registry_client import RegistryClient
-
-
-@runtime_checkable
-class ManagementProvider(Protocol):
-    """Deprecated: use ``MetadataManager`` instead.
-
-    This protocol is kept for backward compatibility. New customer
-    deployments should implement ``MetadataManager`` which combines
-    read (``RegistryProvider``) and write operations.
-    """
-
-    async def create_scenario(self, scenario: dict[str, Any]) -> dict[str, Any]: ...
-    async def update_scenario(
-        self, scenario_id: str, scenario: dict[str, Any]
-    ) -> dict[str, Any]: ...
-    async def delete_scenario(self, scenario_id: str) -> None: ...
-
-    async def create_agent(self, agent: dict[str, Any]) -> dict[str, Any]: ...
-    async def update_agent(
-        self, name: str, agent: dict[str, Any]
-    ) -> dict[str, Any]: ...
-    async def delete_agent(self, name: str) -> None: ...
-
-    async def create_tool(self, tool: dict[str, Any]) -> dict[str, Any]: ...
-    async def update_tool(self, name: str, tool: dict[str, Any]) -> dict[str, Any]: ...
-    async def delete_tool(self, name: str) -> None: ...
-
-    async def add_scenario_agent(
-        self, scenario_id: str, agent_name: str, tool_names: list[str] | None = None
-    ) -> dict[str, Any]: ...
-    async def remove_scenario_agent(
-        self, scenario_id: str, agent_name: str
-    ) -> dict[str, Any]: ...
-    async def add_agent_tool(
-        self, scenario_id: str, agent_name: str, tool_name: str
-    ) -> dict[str, Any]: ...
-    async def remove_agent_tool(
-        self, scenario_id: str, agent_name: str, tool_name: str
-    ) -> dict[str, Any]: ...
-
-    async def close(self) -> None: ...
 
 
 class InMemoryManagementProvider(RegistryClient):
