@@ -175,8 +175,11 @@ async def create_scenario(
     try:
         payload = body.model_dump()
         payload["created_by"] = user_id
-        return await mgmt.create_scenario(payload)
+        result = await mgmt.create_scenario(payload)
+        logger.info("Scenario created id=%s by user=%s", result.get("id"), user_id)
+        return result
     except ValueError as e:
+        logger.warning("Create scenario conflict by user=%s: %s", user_id, e)
         raise HTTPException(409, str(e)) from None
 
 
@@ -193,8 +196,13 @@ async def update_scenario(
     payload = {k: v for k, v in body.model_dump().items() if v is not None}
     payload["updated_by"] = user_id
     try:
-        return await mgmt.update_scenario(scenario_id, payload)
+        result = await mgmt.update_scenario(scenario_id, payload)
+        logger.info("Scenario updated id=%s by user=%s", scenario_id, user_id)
+        return result
     except ValueError as e:
+        logger.warning(
+            "Update scenario not found id=%s by user=%s: %s", scenario_id, user_id, e
+        )
         raise HTTPException(404, str(e)) from None
 
 
@@ -209,8 +217,12 @@ async def delete_scenario(
         raise HTTPException(501, "Management provider not configured")
     try:
         await mgmt.delete_scenario(scenario_id)
+        logger.info("Scenario deleted id=%s by user=%s", scenario_id, user_id)
         return {"status": "deleted", "id": scenario_id}
     except ValueError as e:
+        logger.warning(
+            "Delete scenario not found id=%s by user=%s: %s", scenario_id, user_id, e
+        )
         raise HTTPException(404, str(e)) from None
 
 
@@ -228,10 +240,24 @@ async def add_scenario_agent(
     if mgmt is None:
         raise HTTPException(501, "Management provider not configured")
     try:
-        return await mgmt.add_scenario_agent(
+        result = await mgmt.add_scenario_agent(
             scenario_id, body.agent_name, body.tool_names
         )
+        logger.info(
+            "Agent %s added to scenario %s by user=%s",
+            body.agent_name,
+            scenario_id,
+            user_id,
+        )
+        return result
     except ValueError as e:
+        logger.warning(
+            "Add agent to scenario conflict %s/%s by user=%s: %s",
+            scenario_id,
+            body.agent_name,
+            user_id,
+            e,
+        )
         raise HTTPException(409, str(e)) from None
 
 
@@ -246,8 +272,22 @@ async def remove_scenario_agent(
     if mgmt is None:
         raise HTTPException(501, "Management provider not configured")
     try:
-        return await mgmt.remove_scenario_agent(scenario_id, agent_name)
+        result = await mgmt.remove_scenario_agent(scenario_id, agent_name)
+        logger.info(
+            "Agent %s removed from scenario %s by user=%s",
+            agent_name,
+            scenario_id,
+            user_id,
+        )
+        return result
     except ValueError as e:
+        logger.warning(
+            "Remove agent from scenario not found %s/%s by user=%s: %s",
+            scenario_id,
+            agent_name,
+            user_id,
+            e,
+        )
         raise HTTPException(404, str(e)) from None
 
 
@@ -263,8 +303,24 @@ async def add_agent_tool(
     if mgmt is None:
         raise HTTPException(501, "Management provider not configured")
     try:
-        return await mgmt.add_agent_tool(scenario_id, agent_name, body.tool_name)
+        result = await mgmt.add_agent_tool(scenario_id, agent_name, body.tool_name)
+        logger.info(
+            "Tool %s added to agent %s in scenario %s by user=%s",
+            body.tool_name,
+            agent_name,
+            scenario_id,
+            user_id,
+        )
+        return result
     except ValueError as e:
+        logger.warning(
+            "Add tool to agent conflict %s/%s/%s by user=%s: %s",
+            scenario_id,
+            agent_name,
+            body.tool_name,
+            user_id,
+            e,
+        )
         raise HTTPException(409, str(e)) from None
 
 
@@ -280,8 +336,24 @@ async def remove_agent_tool(
     if mgmt is None:
         raise HTTPException(501, "Management provider not configured")
     try:
-        return await mgmt.remove_agent_tool(scenario_id, agent_name, tool_name)
+        result = await mgmt.remove_agent_tool(scenario_id, agent_name, tool_name)
+        logger.info(
+            "Tool %s removed from agent %s in scenario %s by user=%s",
+            tool_name,
+            agent_name,
+            scenario_id,
+            user_id,
+        )
+        return result
     except ValueError as e:
+        logger.warning(
+            "Remove tool from agent not found %s/%s/%s by user=%s: %s",
+            scenario_id,
+            agent_name,
+            tool_name,
+            user_id,
+            e,
+        )
         raise HTTPException(404, str(e)) from None
 
 
@@ -334,8 +406,13 @@ async def create_agent(
     try:
         payload = body.model_dump()
         payload["created_by"] = user_id
-        return await mgmt.create_agent(payload)
+        result = await mgmt.create_agent(payload)
+        logger.info("Agent created name=%s by user=%s", body.name, user_id)
+        return result
     except ValueError as e:
+        logger.warning(
+            "Create agent conflict name=%s by user=%s: %s", body.name, user_id, e
+        )
         raise HTTPException(409, str(e)) from None
 
 
@@ -352,8 +429,13 @@ async def update_agent(
     payload = {k: v for k, v in body.model_dump().items() if v is not None}
     payload["updated_by"] = user_id
     try:
-        return await mgmt.update_agent(name, payload)
+        result = await mgmt.update_agent(name, payload)
+        logger.info("Agent updated name=%s by user=%s", name, user_id)
+        return result
     except ValueError as e:
+        logger.warning(
+            "Update agent not found name=%s by user=%s: %s", name, user_id, e
+        )
         raise HTTPException(404, str(e)) from None
 
 
@@ -368,8 +450,12 @@ async def delete_agent(
         raise HTTPException(501, "Management provider not configured")
     try:
         await mgmt.delete_agent(name)
+        logger.info("Agent deleted name=%s by user=%s", name, user_id)
         return {"status": "deleted", "name": name}
     except ValueError as e:
+        logger.warning(
+            "Delete agent not found name=%s by user=%s: %s", name, user_id, e
+        )
         raise HTTPException(404, str(e)) from None
 
 
@@ -434,8 +520,13 @@ async def create_tool(
     try:
         payload = body.model_dump()
         payload["created_by"] = user_id
-        return await mgmt.create_tool(payload)
+        result = await mgmt.create_tool(payload)
+        logger.info("Tool created name=%s by user=%s", body.name, user_id)
+        return result
     except ValueError as e:
+        logger.warning(
+            "Create tool conflict name=%s by user=%s: %s", body.name, user_id, e
+        )
         raise HTTPException(409, str(e)) from None
 
 
@@ -452,8 +543,11 @@ async def update_tool(
     payload = {k: v for k, v in body.model_dump().items() if v is not None}
     payload["updated_by"] = user_id
     try:
-        return await mgmt.update_tool(name, payload)
+        result = await mgmt.update_tool(name, payload)
+        logger.info("Tool updated name=%s by user=%s", name, user_id)
+        return result
     except ValueError as e:
+        logger.warning("Update tool not found name=%s by user=%s: %s", name, user_id, e)
         raise HTTPException(404, str(e)) from None
 
 
@@ -468,6 +562,8 @@ async def delete_tool(
         raise HTTPException(501, "Management provider not configured")
     try:
         await mgmt.delete_tool(name)
+        logger.info("Tool deleted name=%s by user=%s", name, user_id)
         return {"status": "deleted", "name": name}
     except ValueError as e:
+        logger.warning("Delete tool not found name=%s by user=%s: %s", name, user_id, e)
         raise HTTPException(404, str(e)) from None
