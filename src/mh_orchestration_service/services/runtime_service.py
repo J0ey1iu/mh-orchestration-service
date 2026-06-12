@@ -187,6 +187,7 @@ async def create_runtime(
     trace_id: str = "",
     provider: str = "",
     model: str = "",
+    emit_message_events: bool = True,
 ) -> tuple[AgentRuntime, AgentRegistry, ToolRegistry, SessionStoreProtocol]:
     adapters = request.app.state.adapters
     llm_provider_registry = getattr(adapters, "llm_provider_registry", None)
@@ -351,6 +352,7 @@ async def create_runtime(
         tool_registry=tool_registry,
         middleware=middleware,
         llm_provider_resolver=llm_provider_resolver,
+        emit_message_events=emit_message_events,
     )
 
     return runtime, agent_registry, tool_registry, session_store
