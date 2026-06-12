@@ -26,13 +26,22 @@ All customer adapter code lives in a **single Python file** (e.g. `my_app.py`) t
 class UserAuthProvider(Protocol):
     async def verify(self, request: Any) -> UserIdentity | None:
         ...
+
+    async def logout(self, request: Any, response: Any) -> None:
+        ...
 ```
 
 **Contract:**
+
+**`verify`:**
 - Input: raw FastAPI `Request` object
 - Output: `UserIdentity` on success, `None` on invalid/missing credentials
 - Read from `request.headers`, `request.cookies`, or call external auth API as needed
-- `UserIdentity` dataclass: `from minimal_harness.auth import UserIdentity`
+
+**`logout`:**
+- Called when the user explicitly logs out via `POST /api/v1/auth/logout`
+- **Must** clear any cookies, tokens, or session state on *response* that was used to authenticate *request*
+- Example: clearing a session cookie via `response.set_cookie(key="session", ..., max_age=0)`, or revoking a token via external API and removing the cookie
 
 ```python
 @dataclass

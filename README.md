@@ -118,6 +118,7 @@ agents = await adapters.management_provider.list_agents()
 | `/api/v1/sessions/{id}` | DELETE | 删除 Session<br/>*支持用户 Token 或 M2M 鉴权* |
 | `/api/v1/agents` | GET | Agent 列表（按权限过滤，支持 `?scenario=` 过滤） |
 | `/api/v1/tools` | GET | Tool 列表（按权限过滤） |
+| `/api/v1/auth/logout` | POST | 用户登出（清除认证态） |
 | `/health` | GET | 健康检查（始终返回 `{"status":"ok"}`） |
 | `/ready` | GET | 就绪检查（检查数据库连接） |
 | `/api/v1/metrics` | GET | 运行时指标快照（仅 `metrics_enabled=true` 时可用） |
@@ -159,7 +160,6 @@ agents = await adapters.management_provider.list_agents()
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/api/v1/dev/login` | GET/POST | 开发用 Mock SSO 登录页 |
-| `/api/v1/dev/logout` | GET | 开发用登出 |
 
 ## AuditMiddleware
 

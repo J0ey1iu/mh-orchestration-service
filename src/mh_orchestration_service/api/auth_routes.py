@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 # ── 认证路由（始终注册） ──────────────────────────
 auth_router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -35,6 +35,14 @@ async def me(request: Request):
         raise HTTPException(status_code=401, detail="Authentication required")
     perms = await adapters.permission_checker.get_permissions(identity.user_id)
     return _user_info(identity, permissions=perms)
+
+
+@auth_router.post("/logout")
+async def auth_logout(request: Request):
+    adapters = request.app.state.adapters
+    response = JSONResponse({"success": True})
+    await adapters.token_verifier.logout(request, response)
+    return response
 
 
 _DEV_LOGIN_HTML = """\
@@ -129,19 +137,4 @@ async def dev_login_submit(request: Request):
         max_age=3600,
         path="/",
     )
-    return response
-
-
-@dev_router.get("/logout")
-async def dev_logout(request: Request, redirect: str = "/"):
-    origin, _ = _parse_redirect(redirect)
-    if not origin:
-        host = request.headers.get("x-forwarded-host") or request.headers["host"]
-        proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-        origin = f"{proto}://{host}"
-    login_url = str(request.url_for("dev_login_page"))
-    target = f"{login_url}?{urlencode({'redirect': origin})}"
-
-    response = RedirectResponse(url=target, status_code=302)
-    response.set_cookie(key="x-user-id", value="", httponly=True, max_age=0, path="/")
     return response

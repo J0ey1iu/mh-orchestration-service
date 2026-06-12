@@ -100,6 +100,11 @@ class _DefaultAuthProvider(UserAuthProvider, PermissionChecker):
     async def get_permissions(self, user_id: str) -> list[str]:
         return self._permissions.get(user_id, [])
 
+    async def logout(self, request: Any, response: Any) -> None:
+        response.set_cookie(
+            key="x-user-id", value="", httponly=True, max_age=0, path="/"
+        )
+
     async def check(self, user_id: str, permission: str) -> bool:
         perms = await self.get_permissions(user_id)
         from minimal_harness.auth.protocols import match_permission
