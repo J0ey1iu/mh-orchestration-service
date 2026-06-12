@@ -6,7 +6,7 @@ from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from minimal_harness.auth import match_permission
+from mh_orchestration_service.auth import match_permission
 from minimal_harness.memory_store import SessionStoreProtocol
 from minimal_harness.tool.registry import ToolRegistry
 from minimal_harness.types import (

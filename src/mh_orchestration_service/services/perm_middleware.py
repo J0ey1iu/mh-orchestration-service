@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from minimal_harness.agent.middleware import Middleware
-from minimal_harness.auth import PermissionChecker
+from mh_orchestration_service.auth import PermissionChecker
 from minimal_harness.types import ToolCall
 
 

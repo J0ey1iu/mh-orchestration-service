@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Header, Request
-from minimal_harness.auth import match_permission
+from mh_orchestration_service.auth import match_permission
 
 from mh_orchestration_service.api.dependencies import (
     get_current_permissions,

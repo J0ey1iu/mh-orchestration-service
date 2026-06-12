@@ -18,7 +18,7 @@ action:resource:target
 | `resource` | 资源大类 | `scene` / `agent` / `tool` / `eval` |
 | `target` | 资源标识或通配符 | `*` / `code-reviewer` / `triage` |
 
-任意一段可用 `*` 匹配全部。匹配逻辑见 `minimal_harness/auth/protocols.py:55` `match_permission()`。
+任意一段可用 `*` 匹配全部。匹配逻辑见 `mh_orchestration_service/auth/protocols.py` `match_permission()`。
 
 ---
 
@@ -73,7 +73,7 @@ async def list_scenarios(
 
 ### 2. 过滤式检查 — `match_permission`
 
-文件: `minimal_harness/auth/protocols.py:55`
+文件: `mh_orchestration_service/auth/protocols.py`
 
 用于用户侧列表接口 — 先获取用户全部权限，再逐个过滤结果:
 ```python
@@ -149,7 +149,7 @@ HTTP Request
 
 ## 生产环境扩展
 
-用户认证和权限系统通过 `minimal_harness/auth/` 中的 Protocol 接口注入:
+用户认证和权限系统通过 `mh_orchestration_service/auth/` 中的 Protocol 接口注入:
 
 ```python
 # app.py — LifespanHook 中替换

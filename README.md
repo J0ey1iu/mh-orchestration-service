@@ -27,7 +27,7 @@ orchestration 通过 LifespanHook 接口与外部系统解耦。所有适配器�
 | `ConfigProvider` | 无（仅环境变量） | 实现 `get(key) → str` 对接 Apollo/Nacos/Vault 等 |
 | `LLMProvider` | 通过 `LLMProviderRegistry` + 环境变量 `ORCH_PROVIDER_*` 配置 | 注入自定义 `llm_provider_factory` 或 `llm_provider_registry` LifespanHook |
 
-`UserAuthProvider`、`PermissionChecker`、`MetadataManager` Protocol 定义见 [minimal-harness SDK](../minimal-harness/)。`OutboundAuthProvider`、`M2MAuthProvider`、`ConfigProvider` Protocol 定义在 `mh_orchestration_service` 内。
+`UserAuthProvider`、`PermissionChecker`、`MetadataManager` Protocol 定义在 `mh_orchestration_service` 内。`OutboundAuthProvider`、`M2MAuthProvider`、`ConfigProvider` Protocol 也定义在 `mh_orchestration_service` 内。
 
 ## `create_app()` 工厂函数（客户部署入口）
 
@@ -259,7 +259,7 @@ mapping = ConfigMapping(
 
 ```python
 from typing import Any
-from minimal_harness.auth import UserAuthProvider, UserIdentity
+from mh_orchestration_service.auth import UserAuthProvider, UserIdentity
 
 class CorpSSOVerifier(UserAuthProvider):
     async def verify(self, request: Any) -> UserIdentity | None:

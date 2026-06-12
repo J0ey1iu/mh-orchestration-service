@@ -109,7 +109,7 @@ python -c "from mh_orchestration_service import create_app; print('OK')"
 验证用户身份（JWT/SAML/OIDC/Cookie），返回用户身份。
 
 ```python
-from minimal_harness.auth import UserAuthProvider, UserIdentity
+from mh_orchestration_service.auth import UserAuthProvider, UserIdentity
 
 class MyUserAuthProvider(UserAuthProvider):
     async def verify(self, request: Any) -> UserIdentity | None:
@@ -134,7 +134,7 @@ class MyUserAuthProvider(UserAuthProvider):
 校验用户是否有权限执行某个操作。
 
 ```python
-from minimal_harness.auth import PermissionChecker
+from mh_orchestration_service.auth import PermissionChecker
 
 class MyPermissionChecker(PermissionChecker):
     async def get_permissions(self, user_id: str) -> list[str]:
@@ -142,7 +142,7 @@ class MyPermissionChecker(PermissionChecker):
 
     async def check(self, user_id: str, permission: str) -> bool:
         perms = await self.get_permissions(user_id)
-        from minimal_harness.auth import match_permission
+        from mh_orchestration_service.auth import match_permission
         return match_permission(perms, permission)
 ```
 

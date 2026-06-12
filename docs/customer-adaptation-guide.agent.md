@@ -19,7 +19,7 @@ All customer adapter code lives in a **single Python file** (e.g. `my_app.py`) t
 
 ## 2. What You MUST Implement
 
-### 2.1 UserAuthProvider (import: `from minimal_harness.auth import UserAuthProvider`)
+### 2.1 UserAuthProvider (import: `from mh_orchestration_service.auth import UserAuthProvider`)
 
 ```python
 @runtime_checkable
@@ -52,7 +52,7 @@ class UserIdentity:
     extra_data: dict[str, Any] = field(default_factory=dict)
 ```
 
-### 2.2 PermissionChecker (import: `from minimal_harness.auth import PermissionChecker`)
+### 2.2 PermissionChecker (import: `from mh_orchestration_service.auth import PermissionChecker`)
 
 ```python
 @runtime_checkable
@@ -66,7 +66,7 @@ class PermissionChecker(Protocol):
 **Contract:**
 - Permission format: `action:resource:target` (e.g. `"use:agent:code-reviewer"`)
 - Wildcard `*` supported at any segment (e.g. `"use:agent:*"`)
-- Use `match_permission()` from `minimal_harness.auth.protocols` to evaluate wildcards
+- Use `match_permission()` from `mh_orchestration_service.auth` to evaluate wildcards
 - Return `True` if permission string matches user's permissions
 
 ### 2.3 MetadataManager (import: `from minimal_harness.adapters import MetadataManager`)

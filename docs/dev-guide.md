@@ -87,7 +87,7 @@ app = create_app(
 #### UserAuthProvider — 用户认证
 
 ```python
-from minimal_harness.auth import UserAuthProvider, UserIdentity
+from mh_orchestration_service.auth import UserAuthProvider, UserIdentity
 
 class MyAuth(UserAuthProvider):
     async def verify(self, request) -> UserIdentity | None:
@@ -106,7 +106,7 @@ class MyAuth(UserAuthProvider):
 #### PermissionChecker — 权限校验
 
 ```python
-from minimal_harness.auth import PermissionChecker, match_permission
+from mh_orchestration_service.auth import PermissionChecker, match_permission
 
 class MyPerms(PermissionChecker):
     async def get_permissions(self, user_id: str) -> list[str]:
@@ -291,7 +291,7 @@ from mh_orchestration_service import (
     ConfigManager, ConfigSchema, ConfigMapping, LifespanHook, create_app,
     OutboundAuthProvider, M2MAuthProvider, ConfigProvider,
 )
-from minimal_harness.auth import UserAuthProvider, PermissionChecker
+from mh_orchestration_service.auth import UserAuthProvider, PermissionChecker
 from minimal_harness.adapters import MetadataManager  # 统一读写协议
 
 

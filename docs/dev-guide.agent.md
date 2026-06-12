@@ -21,7 +21,7 @@ app = create_app(settings=settings)
 
 ## 2. Adapter Protocol Contracts
 
-### 2.1 UserAuthProvider (`from minimal_harness.auth import UserAuthProvider`)
+### 2.1 UserAuthProvider (`from mh_orchestration_service.auth import UserAuthProvider`)
 
 ```python
 @runtime_checkable
@@ -34,7 +34,7 @@ class UserAuthProvider(Protocol):
 - Read from `request.headers`, `request.cookies`, or call external auth API
 - `user_id` is REQUIRED — used for permission checks and session ownership
 
-### 2.2 PermissionChecker (`from minimal_harness.auth import PermissionChecker`)
+### 2.2 PermissionChecker (`from mh_orchestration_service.auth import PermissionChecker`)
 
 ```python
 @runtime_checkable
@@ -45,7 +45,7 @@ class PermissionChecker(Protocol):
 
 - Permission format: `action:resource:target` (e.g. `"use:agent:code-reviewer"`)
 - Wildcard `*` supported at any segment
-- Use `match_permission()` from `minimal_harness.auth.protocols` for wildcard evaluation
+- Use `match_permission()` from `mh_orchestration_service.auth` for wildcard evaluation
 
 ### 2.3 RegistryProvider (`from minimal_harness.adapters import RegistryProvider`)
 

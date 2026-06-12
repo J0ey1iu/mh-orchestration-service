@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from minimal_harness.auth import PermissionChecker, UserAuthProvider, UserIdentity
+from mh_orchestration_service.auth import (
+    PermissionChecker,
+    UserAuthProvider,
+    UserIdentity,
+    match_permission,
+)
 
 
 class _DefaultAuthProvider(UserAuthProvider, PermissionChecker):
@@ -107,6 +112,4 @@ class _DefaultAuthProvider(UserAuthProvider, PermissionChecker):
 
     async def check(self, user_id: str, permission: str) -> bool:
         perms = await self.get_permissions(user_id)
-        from minimal_harness.auth.protocols import match_permission
-
         return match_permission(perms, permission)

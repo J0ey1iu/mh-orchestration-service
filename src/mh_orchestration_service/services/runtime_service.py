@@ -9,7 +9,7 @@ from fastapi import Request
 from minimal_harness.agent.middleware import Middleware
 from minimal_harness.agent.registry import AgentRegistry
 from minimal_harness.agent.runtime import AgentRuntime
-from minimal_harness.auth import match_permission
+from mh_orchestration_service.auth import match_permission
 from minimal_harness.llm.llm import LLMProvider
 from minimal_harness.memory_store import SessionStoreProtocol
 from minimal_harness.tool.registry import ToolRegistry
