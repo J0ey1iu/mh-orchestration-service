@@ -294,7 +294,6 @@ async def _stream_events(
     scenario_id: str = "",
     trace_id: str = "",
 ) -> AsyncIterator[str]:
-    collected_messages: list[dict] = []
     task = None
     stop_event = None
 
@@ -323,7 +322,6 @@ async def _stream_events(
                 break
 
             if isinstance(event, MessageEvent):
-                collected_messages.append(event.message)
                 continue
 
             event_type = type(event).__name__
@@ -352,13 +350,6 @@ async def _stream_events(
             stop_event.set()
         if task is not None:
             await task
-
-        if collected_messages:
-            await session.add_message(
-                {"role": "user", "content": [{"type": "text", "text": message}]}
-            )
-            for msg in collected_messages:
-                await session.add_message(msg)
 
         if not session.title:
             session.title = message[:80]

@@ -5,12 +5,12 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
 from minimal_harness.auth import match_permission
-from minimal_harness.memory import Message, system_message, user_message
+from minimal_harness.memory import system_message, user_message
 from minimal_harness.types import (
     AgentEnd,
     AgentStart,
@@ -19,7 +19,6 @@ from minimal_harness.types import (
     LLMChunk,
     LLMEnd,
     LLMStart,
-    MessageEvent,
     ToolEnd,
     ToolStart,
 )
@@ -210,8 +209,6 @@ async def handoff_execute(
                     },
                 )
 
-                collected_messages: list[dict] = []
-
                 while True:
                     try:
                         event = await asyncio.wait_for(queue.get(), timeout=0.5)
@@ -230,10 +227,6 @@ async def handoff_execute(
 
                     if event is None:
                         break
-
-                    if isinstance(event, MessageEvent):
-                        collected_messages.append(event.message)
-                        continue
 
                     if isinstance(event, AgentStart):
                         yield _sse_line(
@@ -408,25 +401,16 @@ async def handoff_execute(
                         )
 
                 session = await store.get_session(handoff_session_id)
-                if session and collected_messages:
-                    await session.add_message(
-                        cast(
-                            Message,
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": combined}],
-                            },
-                        )
-                    )
-                    for msg in collected_messages:
-                        await session.add_message(cast(Message, msg))
+                if session:
                     title = (
                         task_description[:80]
                         if task_description
                         else f"Handoff to {target_agent_name}"
                     )
                     await store.save_memory(
-                        session.memory, handoff_session_id, extra={"title": title}
+                        session.memory,
+                        handoff_session_id,
+                        extra={"title": title},
                     )
 
                 yield _sse_line(
