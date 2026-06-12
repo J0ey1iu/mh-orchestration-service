@@ -211,6 +211,101 @@ async def _close_adapters(state: AppState) -> None:
         await state.management_provider.close()
 
 
+TAGS_METADATA = [
+    {
+        "name": "auth",
+        "description": "用户认证与身份信息。获取当前用户信息（含权限列表），以及开发模式下的 Mock SSO 登录/登出。",
+    },
+    {
+        "name": "scenarios",
+        "description": "场景查询。获取场景列表（按权限过滤）和场景详情（含关联 Agent/Tool）。",
+    },
+    {
+        "name": "chat",
+        "description": "流式聊天。通过 SSE (Server-Sent Events) 与 Agent 进行流式对话，支持 `session_id` 续传历史。",
+    },
+    {
+        "name": "sessions",
+        "description": "会话管理。用户 Session 的 CRUD，支持按 `scenario_id` 过滤，含消息历史查询。",
+    },
+    {
+        "name": "agents",
+        "description": "Agent 查询。获取 Agent 列表（按权限过滤，支持 `?scenario=` 过滤）以及通过 M2M 鉴权运行 Agent。",
+    },
+    {
+        "name": "tools",
+        "description": "Tool 列表查询。获取当前用户有权使用的 Tool 列表。",
+    },
+    {
+        "name": "runtime_tools",
+        "description": "运行时工具执行。Agent 运行时调用的内置工具，包括 `discover_agents`、`handoff`、`general_visualization` 等。",
+    },
+    {
+        "name": "tool-generator",
+        "description": "AI 工具生成。通过 LLM 动态生成自定义 Tool 的定义与实现代码，支持 CRUD 和试运行。",
+    },
+    {
+        "name": "generated-tools",
+        "description": "已生成工具执行。由 tool-generator 生成的 Tool 的 M2M 鉴权执行端点。",
+    },
+    {
+        "name": "agent-generator",
+        "description": "AI Agent 生成。通过 LLM 动态生成自定义 Agent 的定义与配置，支持 CRUD 和试运行（SSE 流式聊天）。",
+    },
+    {
+        "name": "management",
+        "description": "管理面 CRUD。管理 Scenario、Agent、Tool 资源的增删改查，需要 `manage:*` 权限。",
+    },
+    {
+        "name": "health",
+        "description": "健康检查与就绪检查。`/health` 返回服务存活状态，`/ready` 检查数据库连接可用性。",
+    },
+    {
+        "name": "metrics",
+        "description": "运行时指标。返回内存中采集的实时指标快照（HTTP 请求数/耗时、LLM 调用数/token 用量、Agent 运行数、Tool 调用数、活跃会话数等）。需要 `metrics_enabled=true`。",
+    },
+    {
+        "name": "eval",
+        "description": "评测管理。批量运行评测任务（通过 M2M 鉴权），用于评估 Agent 在测试问题集上的表现。",
+    },
+    {
+        "name": "dev",
+        "description": "开发调试工具（仅在 `dev_mode=true` 时可用）。Mock SSO 登录页、内置组件资源等。",
+    },
+    {
+        "name": "component-sources",
+        "description": "前端组件源配置（仅在 `dev_mode=true` 时可用）。返回 Tool UI 组件的 CDN/本地加载地址。",
+    },
+    {
+        "name": "runtime_tools_dev",
+        "description": "开发用运行时工具（仅在 `dev_mode=true` 时可用），包括 `calculator`、`show_ui_meta`、`stop_agent`。",
+    },
+    {
+        "name": "guide",
+        "description": "智能体使用引导。根据用户输入推荐可用 Agent 场景。",
+    },
+]
+
+_APP_DESCRIPTION = """
+Orchestration Gateway — 一个基于 [minimal-harness](https://github.com/anomalyco/world-of-agents) SDK 构建的核心网关服务。
+
+负责场景加载、用户权限校验、事件流归集，协调前端与各 worker 服务的通信。
+
+## 核心能力
+
+- **场景与 Agent 管理**：动态加载和管理场景 (Scenario)、Agent、Tool 的元数据
+- **流式聊天**：通过 SSE 实现实时的多 Agent 对话，支持会话续传
+- **AI 生成**：通过 LLM 动态生成自定义 Tool 和 Agent
+- **权限与认证**：支持用户 Token 鉴权、M2M 机机鉴权、细粒度工具调用权限校验
+- **可观测性**：结构化访问日志、审计日志、运行时指标采集
+
+## 适配层架构
+
+所有外部依赖（认证、权限、注册中心、LLM Provider 等）通过 LifespanHook 接口注入，
+方便企业部署时对接自有的 SSO、配置中心、密钥管理系统。
+"""
+
+
 def create_app(
     *,
     settings: ConfigSchema,
@@ -338,7 +433,14 @@ def create_app(
         await _close_adapters(state)
         await get_db().close()
 
-    app = FastAPI(title="Orchestration Service", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(
+        title="Orchestration Service",
+        summary="编排网关 — 场景加载、Agent 路由、事件流归集",
+        description=_APP_DESCRIPTION.strip(),
+        version="0.1.0",
+        openapi_tags=TAGS_METADATA,
+        lifespan=lifespan,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
