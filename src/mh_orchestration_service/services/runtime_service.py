@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Sequence
 from typing import Any, Callable
 from urllib.parse import quote
 
 from fastapi import Request
+from minimal_harness.agent.middleware import Middleware
 from minimal_harness.agent.registry import AgentRegistry
 from minimal_harness.agent.runtime import AgentRuntime
 from minimal_harness.auth import match_permission
@@ -188,6 +189,7 @@ async def create_runtime(
     provider: str = "",
     model: str = "",
     emit_message_events: bool = True,
+    extra_middleware: Sequence[Middleware] | None = None,
 ) -> tuple[AgentRuntime, AgentRegistry, ToolRegistry, SessionStoreProtocol]:
     adapters = request.app.state.adapters
     llm_provider_registry = getattr(adapters, "llm_provider_registry", None)
@@ -308,7 +310,7 @@ async def create_runtime(
             if not resolved_model:
                 resolved_model = target_agent_meta.model
 
-    middleware = [
+    middleware: list[Middleware] = [
         PermissionMiddleware(user_id, adapters.permission_checker),
         AuditMiddleware(
             user_id=user_id,
@@ -320,6 +322,8 @@ async def create_runtime(
             trace_id=trace_id,
         ),
     ]
+    if extra_middleware:
+        middleware.extend(extra_middleware)
 
     llm_provider_resolver: Callable[[AgentMetadata], LLMProvider] | None = None
     if llm_provider_registry is not None:

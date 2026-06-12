@@ -30,6 +30,10 @@ from mh_orchestration_service.context import (
     set_current_request,
     set_current_trace_id,
 )
+from mh_orchestration_service.eval.storage import (
+    EvalResultStorage,
+    LocalFileEvalStorage,
+)
 from mh_orchestration_service.monitoring.middleware import AccessLogMiddleware
 from mh_orchestration_service.services.auth_client import _DefaultAuthProvider
 from mh_orchestration_service.services.generated_agent_provider import (
@@ -122,6 +126,7 @@ class AppState:
         self.generated_tool_provider = generated_tool_provider
         self.generated_agent_provider = generated_agent_provider
         self.llm_provider_registry = llm_provider_registry
+        self.eval_result_storage: EvalResultStorage | None = None
 
 
 def _fill_default_adapters(state: AppState) -> None:
@@ -183,6 +188,11 @@ def _fill_default_adapters(state: AppState) -> None:
         state.generated_agent_provider = DefaultAgentGenerator()
         state.generated_agent_provider.set_llm_factory(state.llm_provider_factory)
 
+    if state.eval_result_storage is None:
+        state.eval_result_storage = LocalFileEvalStorage(
+            base_dir=state.settings.eval_results_dir,
+        )
+
 
 async def _close_adapters(state: AppState) -> None:
     """Close built-in adapters that were created by ``_fill_default_adapters``."""
@@ -215,6 +225,7 @@ def create_app(
     generated_tool_provider: LifespanHook | None = None,
     generated_agent_provider: LifespanHook | None = None,
     llm_provider_registry: LifespanHook | None = None,
+    eval_result_storage: LifespanHook | None = None,
     lifespan_hooks: list[LifespanHook] | None = None,
 ) -> FastAPI:
     """Create a configured FastAPI app for the orchestration service.
@@ -300,6 +311,9 @@ def create_app(
                 await stack.enter_async_context(generated_tool_provider(app))
             if generated_agent_provider is not None:
                 await stack.enter_async_context(generated_agent_provider(app))
+
+            if eval_result_storage is not None:
+                await stack.enter_async_context(eval_result_storage(app))
 
             for hook in lifespan_hooks or []:
                 await stack.enter_async_context(hook(app))
