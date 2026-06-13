@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable
 
-from minimal_harness.memory_store import SessionStoreProtocol
+from mh_orchestration_service.database._memory_store import SessionStoreProtocol
 
 from mh_orchestration_service.database import (
     BuiltinSessionStore,

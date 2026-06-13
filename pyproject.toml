@@ -9,7 +9,8 @@ dependencies = [
     "python-multipart>=0.0.20",
     "uvicorn[standard]>=0.30.0",
 
-    "minimal-harness>=0.6.3a1",
+    "minimal-harness>=0.7.0",
+    "mh-service-kit>=0.1.0",
 ]
 
 [build-system]
@@ -24,6 +25,7 @@ mh_orchestration_service = ["py.typed", "static/**"]
 
 [tool.uv.sources]
 minimal-harness = { workspace = true }
+mh-service-kit = { workspace = true }
 
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple/"

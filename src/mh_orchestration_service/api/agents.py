@@ -9,7 +9,7 @@ from minimal_harness.agent.factory import DefaultAgentFactory
 from mh_orchestration_service.auth import match_permission
 from minimal_harness.llm import LLMProvider
 from minimal_harness.memory import ConversationMemory
-from minimal_harness.sse_serialization import serialize_event
+from mh_service_kit.sse import serialize_event
 from minimal_harness.tool.factory import DefaultToolFactory
 from minimal_harness.types import AgentMetadata, ToolMetadata
 

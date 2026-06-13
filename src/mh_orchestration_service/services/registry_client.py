@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator, Callable
 
-from minimal_harness.adapters import RegistryProvider
+from mh_orchestration_service.adapters import RegistryProvider
 
 from mh_orchestration_service.builtin_agents import (
     BUILTIN_AGENTS,

@@ -11,7 +11,7 @@ from minimal_harness.agent.registry import AgentRegistry
 from minimal_harness.agent.runtime import AgentRuntime
 from mh_orchestration_service.auth import match_permission
 from minimal_harness.llm.llm import LLMProvider
-from minimal_harness.memory_store import SessionStoreProtocol
+from mh_orchestration_service.database._memory_store import SessionStoreProtocol
 from minimal_harness.tool.registry import ToolRegistry
 from minimal_harness.types import (
     AgentMetadata,

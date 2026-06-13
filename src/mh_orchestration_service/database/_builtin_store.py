@@ -4,11 +4,15 @@ import json
 from typing import Any, cast
 from uuid import uuid4
 
-from minimal_harness.database import generate_bigint_id
 from minimal_harness.memory import Memory, Message
-from minimal_harness.session import Session, SessionSummary, SimpleSession
 
+from mh_orchestration_service.database._ids import generate_bigint_id
 from mh_orchestration_service.database._protocol import DatabaseProtocol, _ts_ms
+from mh_orchestration_service.database._session import (
+    Session,
+    SessionSummary,
+    SimpleSession,
+)
 
 SYSTEM_USER_ID = 0
 

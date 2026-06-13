@@ -10,9 +10,9 @@ from typing import Any, Callable
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from minimal_harness.adapters import MetadataManager, RegistryProvider
+from mh_orchestration_service.adapters import MetadataManager, RegistryProvider
 from mh_orchestration_service.auth import PermissionChecker, UserAuthProvider
-from minimal_harness.client.logging_setup import setup_service_logging
+from mh_service_kit.logging_setup import setup_service_logging
 from minimal_harness.llm.factory import register_builtin_providers
 from minimal_harness.llm.llm import LLMProvider, LLMProviderRegistry
 from minimal_harness.types import ExtraHeadersProvider
