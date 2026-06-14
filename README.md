@@ -1,8 +1,8 @@
 # orchestration-service — 编排网关
 
-核心网关服务，依赖 [minimal-harness](../minimal-harness/) SDK。负责场景加载、用户权限校验、事件流归集，协调前端与各 worker 服务的通信。
+核心网关服务，依赖 [minimal-harness](https://github.com/J0ey1iu/minimal-harness) SDK。负责场景加载、用户权限校验、事件流归集，协调前端与各 worker 服务的通信。
 
-- 版本：**0.1.2**
+- 版本：**0.1.3a1**
 
 - 端口：`8005`
 - Swagger：`http://localhost:8005/docs`
@@ -12,6 +12,16 @@
 > **企业适配指导**：[docs/customer-adaptation-guide.md](./docs/customer-adaptation-guide.md)（中文） · [docs/customer-adaptation-guide.agent.md](./docs/customer-adaptation-guide.agent.md)（英文，面向 Coding Agent）
 >
 > **构建分发**：[docs/build-guide.md](./docs/build-guide.md)
+
+## 在 mh 生态中的位置
+
+| 包 | 角色 | 仓库 |
+|---|---|---|
+| [minimal-harness](https://github.com/J0ey1iu/minimal-harness) | 核心 SDK（类型、协议、Agent 运行时、LLM 抽象、Memory/Session）。本服务依赖它。 | [J0ey1iu/minimal-harness](https://github.com/J0ey1iu/minimal-harness) |
+| [mh-service-kit](https://github.com/J0ey1iu/mh-service-kit) | FastAPI 服务工具包。本服务使用 `ServiceApp` 来托管 in-cluster Agent（如 dev-mode 下的 `triage`），并通过它提供的 SSE 客户端调用远程 Agent。 | [J0ey1iu/mh-service-kit](https://github.com/J0ey1iu/mh-service-kit) |
+| [mh-tui](https://github.com/J0ey1iu/mh-tui) | 本地 Textual TUI。本服务是它的云端多租户对等形态；二者共享 `minimal-harness` 的 Agent / Tool / Memory 抽象。 | [J0ey1iu/mh-tui](https://github.com/J0ey1iu/mh-tui) |
+| [agent-tool-service](https://github.com/J0ey1iu/mh-incubator/tree/main/packages/agent-tool-service) | 内置于 umbrella 仓的示例 Agent & Tool 服务，可被本服务通过 M2M 端点调用。 | [J0ey1iu/mh-incubator](https://github.com/J0ey1iu/mh-incubator) |
+| [mh-incubator](https://github.com/J0ey1iu/mh-incubator) | umbrella 工作区，串联本服务、agent-tool-service、web-frontend、`minimal-harness` 一起做端到端演示。 | [J0ey1iu/mh-incubator](https://github.com/J0ey1iu/mh-incubator) |
 
 ## 适配层架构
 
