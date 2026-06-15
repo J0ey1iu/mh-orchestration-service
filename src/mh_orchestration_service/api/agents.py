@@ -5,11 +5,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
+from mh_service_kit.sse import serialize_event
 from minimal_harness.agent.factory import DefaultAgentFactory
-from mh_orchestration_service.auth import match_permission
 from minimal_harness.llm import LLMProvider
 from minimal_harness.memory import ConversationMemory
-from mh_service_kit.sse import serialize_event
 from minimal_harness.tool.factory import DefaultToolFactory
 from minimal_harness.types import AgentMetadata, ToolMetadata
 
@@ -23,6 +22,7 @@ from mh_orchestration_service.api.locale import (
     resolve_description,
     resolve_display_name,
 )
+from mh_orchestration_service.auth import match_permission
 from mh_orchestration_service.services.runtime_service import _tool_binding
 
 logger = logging.getLogger("orchestration.agents")

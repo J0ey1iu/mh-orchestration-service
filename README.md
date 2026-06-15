@@ -248,18 +248,18 @@ Agent 元数据的 `provider` 和 `model` 字段控制 per-agent 的 provider �
 2. **外接配置**（`ConfigProvider` 实例，敏感与非敏感通过不同实例区分）— 来自配置中心
 3. **代码默认值** — 若以上均未设置，使用 `ConfigSchema` 中的默认值
 
-### ConfigMapping — 变量映射
+### 远程 key 重映射
+
+`ConfigManager.resolve()` 支持 `key_mapping` 参数，将内部字段名重映射为客户配置中心的 key：
 
 ```python
-from mh_orchestration_service import ConfigMapping
-
-mapping = ConfigMapping(
-    # 内部变量名 → 客户配置中心的 key
+cfg = await config_mgr.resolve(
+    MyConfig,
+    prefix="my.registry",
     key_mapping={
         "db_path": "woa.orchestration.db.path",
     },
-    # 标记为敏感的 key，会走 secret_resolver 实例而非 config_provider 实例
-    sensitive_keys=set(),
+    sensitive_fields={"api_key"},
 )
 ```
 

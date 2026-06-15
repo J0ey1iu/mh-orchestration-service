@@ -9,7 +9,6 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
-from mh_orchestration_service.auth import match_permission
 from minimal_harness.memory import system_message, user_message
 from minimal_harness.types import (
     AgentEnd,
@@ -32,6 +31,7 @@ from mh_orchestration_service.api.locale import (
     resolve_description,
     resolve_display_name,
 )
+from mh_orchestration_service.auth import match_permission
 from mh_orchestration_service.services.database import get_session_store
 from mh_orchestration_service.services.runtime_service import (
     _get_permitted_scenario_agents,

@@ -42,6 +42,9 @@ def _coerce_env_value(value: str, target_type: type[Any] | None) -> Any:
 
     当前支持：
     - ``list[str]`` : 逗号分割（``"a,b,c"`` → ``["a", "b", "c"]``）
+    - ``bool`` : ``"true"/"false"``/``"1"/"0"``/``"yes"/"no"``/``"on"/"off"``
+      （大小写不敏感）；其他值原样返回，由 Pydantic 处理
+    - ``int`` / ``float`` : 严格转换，转换失败原样返回（由 Pydantic 抛错）
     - 其他类型直接返回原字符串（由 Pydantic 做后续转换）。
     """
     if target_type is None:
@@ -50,6 +53,23 @@ def _coerce_env_value(value: str, target_type: type[Any] | None) -> Any:
     args = typing.get_args(target_type)
     if origin is list and args == (str,):
         return [v.strip() for v in value.split(",") if v.strip()]
+    if target_type is bool:
+        lowered = value.strip().lower()
+        if lowered in ("true", "1", "yes", "on"):
+            return True
+        if lowered in ("false", "0", "no", "off"):
+            return False
+        return value
+    if target_type is int:
+        try:
+            return int(value)
+        except ValueError:
+            return value
+    if target_type is float:
+        try:
+            return float(value)
+        except ValueError:
+            return value
     return value
 
 

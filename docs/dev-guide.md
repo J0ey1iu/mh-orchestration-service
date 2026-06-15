@@ -122,7 +122,7 @@ class MyPerms(PermissionChecker):
 #### RegistryProvider — 注册中心
 
 ```python
-from minimal_harness.adapters import RegistryProvider
+from mh_orchestration_service.adapters import RegistryProvider
 
 class MyRegistry(RegistryProvider):
     async def list_agents(self) -> list[dict]:
@@ -149,7 +149,7 @@ class MyRegistry(RegistryProvider):
 > `management_provider` AppState 槽位优先期望 `MetadataManager` 实现。
 >
 > ```python
-> from minimal_harness.adapters import MetadataManager
+> from mh_orchestration_service.adapters import MetadataManager
 > # MetadataManager 继承了 RegistryProvider 所有读方法 + 上述 CRUD 方法
 > ```
 
@@ -288,11 +288,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic import BaseModel
 from mh_orchestration_service import (
-    ConfigManager, ConfigSchema, ConfigMapping, LifespanHook, create_app,
+    ConfigManager, ConfigSchema, LifespanHook, create_app,
     OutboundAuthProvider, M2MAuthProvider, ConfigProvider,
+    MetadataManager, UserAuthProvider, PermissionChecker,
 )
-from mh_orchestration_service.auth import UserAuthProvider, PermissionChecker
-from minimal_harness.adapters import MetadataManager  # 统一读写协议
 
 
 # ── 日志 ────────────────────────────────────────
@@ -308,11 +307,6 @@ class MyConfigProvider(ConfigProvider):
 config_mgr = ConfigManager(
     config_provider=MyConfigProvider(),
     secret_resolver=MyConfigProvider(),  # 同一协议类型，可传不同实例
-)
-
-mapping = ConfigMapping(
-    key_mapping={},
-    sensitive_keys=set(),
 )
 
 

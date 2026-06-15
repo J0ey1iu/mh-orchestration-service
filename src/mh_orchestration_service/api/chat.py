@@ -6,8 +6,6 @@ from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from mh_orchestration_service.auth import match_permission
-from mh_orchestration_service.database._memory_store import SessionStoreProtocol
 from minimal_harness.tool.registry import ToolRegistry
 from minimal_harness.types import (
     AgentEnd,
@@ -31,7 +29,9 @@ from mh_orchestration_service.api.dependencies import (
     resolve_request_permissions,
 )
 from mh_orchestration_service.api.locale import parse_locale
+from mh_orchestration_service.auth import match_permission
 from mh_orchestration_service.context import get_current_trace_id
+from mh_orchestration_service.database._memory_store import SessionStoreProtocol
 from mh_orchestration_service.services.database import get_session_store
 from mh_orchestration_service.services.runtime_service import (
     acquire_session_lock,

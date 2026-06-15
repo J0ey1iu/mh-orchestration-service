@@ -10,17 +10,17 @@ from typing import Any, Callable
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from mh_orchestration_service.adapters import MetadataManager, RegistryProvider
-from mh_orchestration_service.auth import PermissionChecker, UserAuthProvider
 from mh_service_kit.logging_setup import setup_service_logging
 from minimal_harness.llm.factory import register_builtin_providers
 from minimal_harness.llm.llm import LLMProvider, LLMProviderRegistry
 from minimal_harness.types import ExtraHeadersProvider
 from starlette.responses import FileResponse
 
+from mh_orchestration_service.adapters import MetadataManager, RegistryProvider
 from mh_orchestration_service.api.auth_routes import dev_router
 from mh_orchestration_service.api.component_sources import component_sources_router
 from mh_orchestration_service.api.router import router
+from mh_orchestration_service.auth import PermissionChecker, UserAuthProvider
 from mh_orchestration_service.config import ConfigSchema
 from mh_orchestration_service.context import (
     clear_current_user_id,
@@ -114,6 +114,7 @@ class AppState:
         generated_agent_provider: AgentGenerator | None = None,
         llm_provider_registry: LLMProviderRegistry | None = None,
     ) -> None:
+        object.__setattr__(self, "_initialized", False)
         self.settings = settings
         self.token_verifier = token_verifier
         self.permission_checker = permission_checker
@@ -127,6 +128,19 @@ class AppState:
         self.generated_agent_provider = generated_agent_provider
         self.llm_provider_registry = llm_provider_registry
         self.eval_result_storage: EvalResultStorage | None = None
+        object.__setattr__(self, "_initialized", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "registry_provider" and getattr(self, "_initialized", False):
+            warnings.warn(
+                "AppState.registry_provider is deprecated; "
+                "use AppState.management_provider instead. "
+                "The 'registry_provider' slot remains available for backward "
+                "compatibility but will be removed in a future major release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        object.__setattr__(self, name, value)
 
 
 def _fill_default_adapters(state: AppState) -> None:
@@ -145,7 +159,7 @@ def _fill_default_adapters(state: AppState) -> None:
             state.management_provider = InMemoryManagementProvider(
                 enable_builtin=state.settings.dev_mode,
             )
-            state.registry_provider = state.management_provider
+            object.__setattr__(state, "registry_provider", state.management_provider)
         elif isinstance(state.registry_provider, MetadataManager):
             state.management_provider = state.registry_provider
         else:
@@ -209,6 +223,44 @@ async def _close_adapters(state: AppState) -> None:
         await state.m2m_auth_provider.close()
     if isinstance(state.management_provider, InMemoryManagementProvider):
         await state.management_provider.close()
+
+
+_KNOWN_ADAPTER_SLOTS: frozenset[str] = frozenset(
+    {
+        "settings",
+        "token_verifier",
+        "permission_checker",
+        "registry_provider",
+        "management_provider",
+        "llm_provider_factory",
+        "outbound_auth_provider",
+        "m2m_auth_provider",
+        "llm_extra_headers_provider",
+        "generated_tool_provider",
+        "generated_agent_provider",
+        "llm_provider_registry",
+        "eval_result_storage",
+        "_initialized",
+    }
+)
+
+
+def _warn_unknown_adapter_slots(state: AppState) -> None:
+    """Warn if a LifespanHook set an attribute that is not a known adapter slot.
+
+    Catches typos like ``app.state.adapters.management_providers = MyXxx``
+    that would otherwise be silently dropped (no runtime error, but the
+    adapter is never picked up by the framework).
+    """
+    unknown = [attr for attr in state.__dict__ if attr not in _KNOWN_ADAPTER_SLOTS]
+    if unknown:
+        logger.warning(
+            "LifespanHook set unknown AppState attribute(s): %s. "
+            "Known slots: %s. "
+            "This is usually a typo — the attribute is ignored by the framework.",
+            sorted(unknown),
+            sorted(_KNOWN_ADAPTER_SLOTS),
+        )
 
 
 TAGS_METADATA = [
@@ -412,6 +464,8 @@ def create_app(
 
             for hook in lifespan_hooks or []:
                 await stack.enter_async_context(hook(app))
+
+            _warn_unknown_adapter_slots(state)
 
             await init_db(
                 settings.database_url,

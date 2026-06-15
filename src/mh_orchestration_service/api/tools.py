@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Header, Request
-from mh_orchestration_service.auth import match_permission
 
 from mh_orchestration_service.api.dependencies import (
     get_current_permissions,
@@ -12,6 +11,7 @@ from mh_orchestration_service.api.locale import (
     resolve_description,
     resolve_display_name,
 )
+from mh_orchestration_service.auth import match_permission
 
 router = APIRouter(prefix="/api/v1/tools", tags=["tools"])
 

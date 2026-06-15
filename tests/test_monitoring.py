@@ -9,9 +9,8 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from mh_orchestration_service.auth import UserIdentity
-
 from mh_orchestration_service.app import create_app
+from mh_orchestration_service.auth import UserIdentity
 from mh_orchestration_service.config import ConfigSchema
 from mh_orchestration_service.monitoring.collector import (
     MetricsCollector,
@@ -223,7 +222,7 @@ class TestAuditMiddlewareStructuredLogging:
             provider="openai",
             model="deepseek",
         )
-        from minimal_harness.types import LLMEnd, AgentEnd, ToolCall
+        from minimal_harness.types import AgentEnd, LLMEnd, ToolCall
 
         await m.on_agent_start("test")
         await m.on_agent_end(

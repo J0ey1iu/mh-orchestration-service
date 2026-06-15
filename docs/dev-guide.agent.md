@@ -47,7 +47,7 @@ class PermissionChecker(Protocol):
 - Wildcard `*` supported at any segment
 - Use `match_permission()` from `mh_orchestration_service.auth` for wildcard evaluation
 
-### 2.3 RegistryProvider (`from minimal_harness.adapters import RegistryProvider`)
+### 2.3 RegistryProvider (`from mh_orchestration_service.adapters import RegistryProvider`)
 
 ```python
 @runtime_checkable
@@ -141,7 +141,7 @@ class ConfigProvider(Protocol):
 - `SecretResolver` is a backward-compatible alias; `from mh_orchestration_service import SecretResolver` still works
 - `ConfigManager` accepts two `ConfigProvider` instances — `config_provider` and `secret_resolver` — differentiated by the `sensitive_fields` parameter
 
-### 2.7 MetadataManager (`from minimal_harness.adapters import MetadataManager`)
+### 2.7 MetadataManager (`from mh_orchestration_service.adapters import MetadataManager`)
 
 ```python
 @runtime_checkable
@@ -237,7 +237,7 @@ Every adapter is injected as a `LifespanHook` (`Callable[[FastAPI], AbstractAsyn
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from minimal_harness.adapters import MetadataManager
+from mh_orchestration_service.adapters import MetadataManager
 
 @asynccontextmanager
 async def my_hook(app: FastAPI):
@@ -328,12 +328,17 @@ All fields have defaults:
 
 > **Note:** `llm_api_key`, `llm_base_url`, `llm_model` were removed from `ConfigSchema`. LLM configuration is now handled by `LLMProviderRegistry` with per-provider defaults via env vars `ORCH_PROVIDER_{NAME}__{KEY}` (e.g. `ORCH_PROVIDER_OPENAI__API_KEY=sk-xxx`).
 
-### 4.3 ConfigMapping (`from mh_orchestration_service import ConfigMapping`)
+### 4.3 Remote key remapping
+
+`ConfigManager.resolve()` accepts a `key_mapping: dict[str, str]` kwarg that maps internal field names to the customer's config-center key. The same field naming as the env var (uppercased prefix + field) is used when no mapping is supplied.
 
 ```python
-class ConfigMapping(BaseModel):
-    key_mapping: dict[str, str] = {}     # field_name -> remote config key
-    sensitive_keys: set[str] = set()     # field names treated as sensitive
+cfg = await config_mgr.resolve(
+    MyConfig,
+    prefix="my.registry",
+    key_mapping={"db_path": "woa.orchestration.db.path"},
+    sensitive_fields={"api_key"},
+)
 ```
 
 ---

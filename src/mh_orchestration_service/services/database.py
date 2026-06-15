@@ -3,13 +3,12 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable
 
-from mh_orchestration_service.database._memory_store import SessionStoreProtocol
-
 from mh_orchestration_service.database import (
     BuiltinSessionStore,
     DatabaseProtocol,
     SqliteDatabase,
 )
+from mh_orchestration_service.database._memory_store import SessionStoreProtocol
 
 _db: DatabaseProtocol | None = None
 _session_store_factory: (

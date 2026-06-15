@@ -69,7 +69,7 @@ class PermissionChecker(Protocol):
 - Use `match_permission()` from `mh_orchestration_service.auth` to evaluate wildcards
 - Return `True` if permission string matches user's permissions
 
-### 2.3 MetadataManager (import: `from minimal_harness.adapters import MetadataManager`)
+### 2.3 MetadataManager (import: `from mh_orchestration_service.adapters import MetadataManager`)
 
 This is the **recommended** unified read/write protocol. It extends `RegistryProvider` with CRUD methods.
 
@@ -230,15 +230,7 @@ Both `config_provider` and `secret_resolver` use the same `ConfigProvider` proto
 
 > **LLM config is NOT in ConfigSchema.** LLM configuration uses `LLMProviderRegistry` with env vars `ORCH_PROVIDER_{NAME}__{KEY}` (e.g. `ORCH_PROVIDER_OPENAI__API_KEY=sk-xxx`).
 
-### 3.2 ConfigMapping (import: `from mh_orchestration_service.config_mapping import ConfigMapping`)
-
-```python
-class ConfigMapping(BaseModel):
-    key_mapping: dict[str, str] = {}     # field_name -> remote config key
-    sensitive_keys: set[str] = set()     # field names treated as sensitive
-```
-
-### 3.3 ConfigManager (import: `from mh_orchestration_service.config_manager import ConfigManager`)
+### 3.2 ConfigManager (import: `from mh_orchestration_service.config_manager import ConfigManager`)
 
 ```python
 class ConfigManager:

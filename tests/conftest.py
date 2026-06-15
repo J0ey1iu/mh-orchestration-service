@@ -6,8 +6,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from mh_orchestration_service.app import create_app
-from mh_orchestration_service.config import ConfigSchema
 from mh_orchestration_service.auth import UserIdentity
+from mh_orchestration_service.config import ConfigSchema
 
 TEST_SCENARIOS = [
     {

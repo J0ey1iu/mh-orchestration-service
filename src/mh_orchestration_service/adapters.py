@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -70,34 +70,3 @@ class MetadataManager(RegistryProvider, Protocol):
     ) -> dict[str, Any]: ...
 
     async def close(self) -> None: ...
-
-
-@runtime_checkable
-class ToolProvider(Protocol):
-    """Provides tool definitions and execution.
-
-    Customer deployment: implement this protocol to register the
-    customer's own tools (e.g. loaded from a database, YAML files,
-    or a remote tool registry).
-    """
-
-    def list_tools(self) -> list[dict]:
-        """Return metadata for all available tools.
-
-        Each dict should contain ``name``, ``display_name``,
-        ``description``, ``parameters``, and optionally
-        ``display_name_locale`` / ``description_locale``.
-        """
-        ...
-
-    def execute(
-        self, tool_name: str, args: dict, tool_call_id: str
-    ) -> AsyncIterator[str]:
-        """Execute *tool_name* with *args* and yield SSE lines.
-
-        Each yielded line should follow the format::
-
-            data: {"type": "tool_progress", "content": "..."}
-            data: {"type": "tool_end", "result": "..."}
-        """
-        ...

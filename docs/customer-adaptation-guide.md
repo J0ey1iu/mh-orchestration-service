@@ -153,7 +153,7 @@ class MyPermissionChecker(PermissionChecker):
 推荐的统一读写协议。提供 Agent 元数据、Tool 定义、Scenario 列表的读取和写入。
 
 ```python
-from minimal_harness.adapters import MetadataManager
+from mh_orchestration_service.adapters import MetadataManager
 
 class MyRegistry(MetadataManager):
     # ── 只读（继承自 RegistryProvider） ─
@@ -390,7 +390,7 @@ from mh_orchestration_service import (
 ### Adapter 中使用示例
 
 ```python
-from minimal_harness.adapters import MetadataManager
+from mh_orchestration_service.adapters import MetadataManager
 from mh_orchestration_service import get_current_user_id, get_current_auth_token
 
 
@@ -918,7 +918,7 @@ class SessionStoreProtocol(Protocol):
 ## 最佳实践
 
 1. **先实现 `MetadataManager`** — 它是核心数据来源，统一读写协议，管理面 API 和运行时 API 共享同一数据源
-2. **使用 ConfigMapping** — 避免在代码中硬编码配置 key，将所有 key 集中管理
+2. **使用 `key_mapping` 集中管理远程 key** — 通过 `ConfigManager.resolve(key_mapping=...)` 避免在代码中硬编码配置中心的 key
 3. **生产环境务必注入所有 Adapter** — 不要依赖内置默认实现
 4. **M2MAuthProvider 必须替换** — 默认实现允许所有请求，生产环境必须实现基于 SOA 的鉴权
 5. **日志** — 如需自定义日志输出，在调用 `create_app()` 前自行配置 `logging.getLogger()`（root logger）。SDK 提供内置默认日志配置。

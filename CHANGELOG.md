@@ -1,5 +1,15 @@
 # Change Log
 
+## 0.1.3a1
+
+- chore: remove dead `ConfigMapping` class (was exported but never used by `ConfigManager.resolve()`)
+- chore: remove unused `ToolProvider` Protocol from `adapters.py`
+- feat: export `UserAuthProvider`, `PermissionChecker`, `UserIdentity`, `match_permission`, `MetadataManager`, `RegistryProvider`, `ToolGenerator`, `AgentGenerator`, `InMemoryManagementProvider`, `DefaultAuthProvider`, `DefaultM2MAuthProvider`, `DefaultOutboundAuthProvider` at top-level `mh_orchestration_service` package for easier imports
+- feat: `ConfigManager` env-var coercion now supports `int` / `bool` / `float` natively (in addition to `list[str]`)
+- feat: warn on `LifespanHook` setting an unknown `AppState` attribute (catches typos like `management_providers`)
+- refactor: deprecate `AppState.registry_provider` field — use `management_provider` instead (still functional, emits `DeprecationWarning` on set)
+- docs: fix `MetadataManager` / `RegistryProvider` import path in customer/dev guides (was incorrectly pointing at `minimal_harness.adapters`)
+
 ## 0.1.2
 
 - feat: add `resolve_m2m_identity` for user-aware M2M permission checks
