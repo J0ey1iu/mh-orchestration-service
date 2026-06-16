@@ -71,7 +71,7 @@ class Session(Protocol):
         self,
         summarizer: CompactionSummarizer,
         keep_recent: int,
-        prompt_tokens: int,
+        total_tokens: int,
     ) -> AsyncIterator[CompactionEvent]: ...
     def reset_message_usage(self) -> None: ...
 
@@ -138,12 +138,12 @@ class SimpleSession:
         self,
         summarizer: Any,
         keep_recent: int,
-        prompt_tokens: int,
+        total_tokens: int,
     ) -> Any:
         return self._memory.compact(
             summarizer=summarizer,
             keep_recent=keep_recent,
-            prompt_tokens=prompt_tokens,
+            total_tokens=total_tokens,
         )
 
     def reset_message_usage(self) -> None:

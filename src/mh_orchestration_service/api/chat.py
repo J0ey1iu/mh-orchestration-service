@@ -167,7 +167,7 @@ def _serialize_event(event: Any) -> dict[str, Any]:
                 "dropped_message_count": event.dropped_message_count,
                 "existing_summary": event.existing_summary,
                 "keep_recent": event.keep_recent,
-                "prompt_tokens": event.prompt_tokens,
+                "total_tokens": event.total_tokens,
             }
         case CompactionChunk():
             return {
