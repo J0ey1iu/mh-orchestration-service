@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.2.0a1
+
+- chore: bump `minimal-harness>=0.7.0a1` and `mh-service-kit>=0.1.1a1` for pre-release alignment
+
 ## 0.1.3a1
 
 - chore: remove dead `ConfigMapping` class (was exported but never used by `ConfigManager.resolve()`)
