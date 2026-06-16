@@ -54,7 +54,12 @@ BUILTIN_AGENTS: list[dict[str, Any]] = [
             ensure_ascii=False,
         ),
         "provider": "openai",
-        "model": "gpt-4o",
+        "model": "deepseek-v4-flash",
+        "agent_type": "compacting",
+        "compaction": {
+            "prompt_token_threshold": 8000,
+            "keep_recent": 6,
+        },
     },
     {
         "name": "code-reviewer",
@@ -69,7 +74,7 @@ BUILTIN_AGENTS: list[dict[str, Any]] = [
         ),
         "endpoint_url": "/api/v1/agents/code-reviewer/run",
         "provider": "openai",
-        "model": "gpt-4o",
+        "model": "deepseek-v4-flash",
     },
     {
         "name": "writer",
@@ -84,7 +89,7 @@ BUILTIN_AGENTS: list[dict[str, Any]] = [
         ),
         "endpoint_url": "/api/v1/agents/writer/run",
         "provider": "openai",
-        "model": "gpt-4o",
+        "model": "deepseek-v4-flash",
     },
 ]
 

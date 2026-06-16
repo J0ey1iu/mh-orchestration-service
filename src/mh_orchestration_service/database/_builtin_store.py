@@ -188,6 +188,16 @@ class BuiltinSessionStore:
 
         session.memory.set_persisted_count(len(msg_rows))
 
+        # Restore _forward_offset from the last compaction message.
+        # When loaded from DB rows, _forward_offset defaults to 0,
+        # causing get_forward_messages() to return all messages
+        # instead of only the compacted summary + recent.
+        all_msgs = session.get_all_messages()
+        for i in range(len(all_msgs) - 1, -1, -1):
+            if all_msgs[i].get("role") == "compaction":
+                session.memory.set_forward_offset(i)
+                break
+
         self._cache[session_id] = session
         return session
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any, Protocol, TypedDict
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from minimal_harness.memory import (
     Message,
     TokenUsage,
 )
+from minimal_harness.types import CompactionEvent, CompactionSummarizer
 
 from mh_orchestration_service.database._ids import generate_bigint_id
 
@@ -64,6 +66,14 @@ class Session(Protocol):
     def get_message_usage(self) -> TokenUsage: ...
     def dump_memory(self) -> MemoryData: ...
     def load_memory(self, data: MemoryData) -> None: ...
+
+    def compact(
+        self,
+        summarizer: CompactionSummarizer,
+        keep_recent: int,
+        prompt_tokens: int,
+    ) -> AsyncIterator[CompactionEvent]: ...
+    def reset_message_usage(self) -> None: ...
 
 
 class SimpleSession:
@@ -123,3 +133,18 @@ class SimpleSession:
 
     def load_memory(self, data: Any) -> None:
         self._memory.load_memory(data)
+
+    def compact(
+        self,
+        summarizer: Any,
+        keep_recent: int,
+        prompt_tokens: int,
+    ) -> Any:
+        return self._memory.compact(
+            summarizer=summarizer,
+            keep_recent=keep_recent,
+            prompt_tokens=prompt_tokens,
+        )
+
+    def reset_message_usage(self) -> None:
+        self._memory.reset_message_usage()

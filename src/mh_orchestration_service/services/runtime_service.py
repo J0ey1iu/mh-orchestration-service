@@ -6,13 +6,16 @@ from typing import Any, Callable
 from urllib.parse import quote
 
 from fastapi import Request
+from mh_service_kit.sse.tool_executor import SSEToolExecutor
 from minimal_harness.agent.middleware import Middleware
 from minimal_harness.agent.registry import AgentRegistry
 from minimal_harness.agent.runtime import AgentRuntime
 from minimal_harness.llm.llm import LLMProvider
+from minimal_harness.tool.factory import DefaultToolFactory
 from minimal_harness.tool.registry import ToolRegistry
 from minimal_harness.types import (
     AgentMetadata,
+    CompactionSettings,
     LocalAgentBinding,
     LocalToolBinding,
     RemoteAgentBinding,
@@ -24,10 +27,17 @@ from mh_orchestration_service.api.locale import parse_locale_json
 from mh_orchestration_service.auth import match_permission
 from mh_orchestration_service.database._memory_store import SessionStoreProtocol
 from mh_orchestration_service.services.audit_middleware import AuditMiddleware
+from mh_orchestration_service.services.compaction import make_llm_summarizer
 from mh_orchestration_service.services.database import get_session_store
 from mh_orchestration_service.services.m2m_auth import M2MAuthProvider
 from mh_orchestration_service.services.outbound_auth import OutboundAuthProvider
 from mh_orchestration_service.services.perm_middleware import PermissionMiddleware
+
+
+class _SSEToolExecutorFactory:
+    def create(self, binding: RemoteToolBinding) -> SSEToolExecutor:
+        return SSEToolExecutor(binding)
+
 
 # ── Per-session concurrency lock ──────────────────────────────────────────────
 
@@ -54,6 +64,18 @@ async def release_session_lock(session_id: str, lock: asyncio.Lock) -> None:
     lock.release()
     async with _SESSION_LOCKS_MUTEX:
         _SESSION_LOCKS.pop(session_id, None)
+
+
+def _resolve_compaction_settings(agent_dict: dict) -> CompactionSettings | None:
+    raw = agent_dict.get("compaction")
+    if not raw or not isinstance(raw, dict):
+        return None
+    result: CompactionSettings = {}
+    if "prompt_token_threshold" in raw:
+        result["prompt_token_threshold"] = int(raw["prompt_token_threshold"])
+    if "keep_recent" in raw:
+        result["keep_recent"] = int(raw["keep_recent"])
+    return result if result else None
 
 
 def _make_extra_headers_provider(
@@ -247,10 +269,12 @@ async def create_runtime(
                 system_prompt=a.get("system_prompt", ""),
                 system_prompt_locale=parse_locale_json(a.get("system_prompt_locale")),
                 metadata_id=a["name"],
+                agent_type=a.get("agent_type", "simple"),
                 tool_names=scenario_tool_names.get(a["name"], []),
                 provider=a.get("provider", "openai"),
                 model=a.get("model", ""),
                 llm_config=a.get("llm_config", {}),
+                compaction=_resolve_compaction_settings(a),
                 binding=await _agent_binding(
                     a,
                     request,
@@ -356,7 +380,15 @@ async def create_runtime(
         tool_registry=tool_registry,
         middleware=middleware,
         llm_provider_resolver=llm_provider_resolver,
+        tool_factory=DefaultToolFactory(
+            executor_factories={"default": _SSEToolExecutorFactory()},
+        ),
         emit_message_events=emit_message_events,
+        compaction_summarizer_factory=make_llm_summarizer,
+        default_compaction_settings=CompactionSettings(
+            prompt_token_threshold=8000,
+            keep_recent=6,
+        ),
     )
 
     return runtime, agent_registry, tool_registry, session_store

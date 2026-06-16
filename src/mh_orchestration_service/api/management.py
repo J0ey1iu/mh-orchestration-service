@@ -81,6 +81,8 @@ class AgentCreate(BaseModel):
     provider: str = "openai"
     model: str = ""
     llm_config: dict[str, Any] = {}
+    agent_type: str = "simple"
+    compaction: dict[str, Any] = {}
 
 
 class AgentUpdate(BaseModel):
@@ -94,6 +96,8 @@ class AgentUpdate(BaseModel):
     provider: str | None = None
     model: str | None = None
     llm_config: dict[str, Any] | None = None
+    agent_type: str | None = None
+    compaction: dict[str, Any] | None = None
 
 
 class ToolCreate(BaseModel):

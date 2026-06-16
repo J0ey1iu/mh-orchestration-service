@@ -10,6 +10,9 @@ from minimal_harness.tool.registry import ToolRegistry
 from minimal_harness.types import (
     AgentEnd,
     AgentStart,
+    CompactionChunk,
+    CompactionEnd,
+    CompactionStart,
     ExecutionEnd,
     ExecutionStart,
     LLMChunk,
@@ -159,6 +162,26 @@ def _serialize_event(event: Any) -> dict[str, Any]:
             }
         case MemoryUpdate():
             return {"usage": event.usage}
+        case CompactionStart():
+            return {
+                "dropped_message_count": event.dropped_message_count,
+                "existing_summary": event.existing_summary,
+                "keep_recent": event.keep_recent,
+                "prompt_tokens": event.prompt_tokens,
+            }
+        case CompactionChunk():
+            return {
+                "delta": event.delta,
+                "accumulated": event.accumulated,
+            }
+        case CompactionEnd():
+            return {
+                "summary": event.summary,
+                "dropped_message_count": event.dropped_message_count,
+                "new_offset": event.new_offset,
+                "duration": event.duration,
+                "error": event.error,
+            }
     return {}
 
 
