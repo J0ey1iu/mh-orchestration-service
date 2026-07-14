@@ -2,7 +2,6 @@ import asyncio
 import warnings
 
 import pytest
-
 from mh_orchestration_service import (
     AgentGenerator,
     AppState,

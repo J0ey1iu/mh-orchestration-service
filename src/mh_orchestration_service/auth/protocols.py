@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+from mh_orchestration_service.local.permissions import match_permission
+
 
 @dataclass
 class UserIdentity:
@@ -61,16 +63,9 @@ class PermissionChecker(Protocol):
         ...
 
 
-def match_permission(user_permissions: list[str], target: str) -> bool:
-    """Wildcard-aware permission matching.
-
-    Each permission in *user_permissions* is a ``:``-separated triple.
-    ``*`` in any segment acts as a wildcard.
-    """
-    target_parts = target.split(":", maxsplit=2)
-    for p in user_permissions:
-        parts = p.split(":", maxsplit=2)
-        if len(parts) == 3 and len(target_parts) == 3:
-            if all(parts[i] == target_parts[i] or parts[i] == "*" for i in range(3)):
-                return True
-    return False
+__all__ = [
+    "PermissionChecker",
+    "UserAuthProvider",
+    "UserIdentity",
+    "match_permission",
+]
