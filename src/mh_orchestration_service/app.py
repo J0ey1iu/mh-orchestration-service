@@ -289,7 +289,7 @@ TAGS_METADATA = [
     },
     {
         "name": "runtime_tools",
-        "description": "运行时工具执行。Agent 运行时调用的内置工具，包括 `discover_agents`、`handoff`、`general_visualization` 等。",
+        "description": "运行时工具执行。Agent 运行时调用的内置工具，包括 `discover_agents`、`handoff` 等。",
     },
     {
         "name": "tool-generator",
@@ -411,7 +411,11 @@ def create_app(
             DeprecationWarning,
             stacklevel=2,
         )
-    setup_service_logging()
+    # Wire ``settings.log_level`` to the stdlib root logger so deployers
+    # can control verbosity via the env (ORCH_LOG_LEVEL).  The function
+    # is a no-op if the root logger already has handlers, so callers
+    # that configured logging themselves stay in control.
+    setup_service_logging(level=settings.log_level)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

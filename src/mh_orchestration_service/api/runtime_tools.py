@@ -9,7 +9,6 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
-from minimal_harness.memory import system_message, user_message
 from minimal_harness.types import (
     AgentEnd,
     AgentStart,
@@ -24,7 +23,6 @@ from minimal_harness.types import (
 
 from mh_orchestration_service.api.dependencies import (
     resolve_m2m_identity,
-    verify_m2m_request,
 )
 from mh_orchestration_service.api.locale import (
     parse_locale,
@@ -429,10 +427,23 @@ async def handoff_execute(
                     sub_stop_event.set()
                 if sub_task is not None:
                     sub_task.cancel()
+                    # Re-raise CancelledError so the surrounding
+                    # async context can propagate it; swallow other
+                    # exceptions because the sub-task's failure is
+                    # already surfaced via the streaming queue and
+                    # the caller has a final ``result`` they can act
+                    # on. Swallowing the rest is deliberate: a single
+                    # misbehaving sub-task must not poison the outer
+                    # handoff cleanup.
                     try:
                         await sub_task
-                    except (asyncio.CancelledError, Exception):
-                        pass
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        logger.exception(
+                            "handoff.sub_task.cleanup error session_id=%s",
+                            handoff_session_id,
+                        )
                 await release_session_lock(handoff_session_id, lock)
 
         except Exception:
@@ -469,6 +480,11 @@ GENERAL_VIZ_SYSTEM_PROMPT_ZH = """你是一个数据可视化专家。根据用�
 - 页面需响应式
 - 只输出原始 HTML 代码，不要用 markdown 代码块包裹，不要任何解释"""
 
+# NOTE: the general_visualization tool was removed in the 2026-07-15
+# audit round. The prompts above are kept only as historical
+# reference; nothing in the runtime references them anymore. They
+# can be deleted in a follow-up cleanup PR.
+
 
 def _extract_html(raw: str) -> str:
     raw = raw.strip()
@@ -487,119 +503,7 @@ def _extract_html(raw: str) -> str:
     return raw
 
 
-@router.post("/general_visualization/execute")
-async def general_visualization_execute(
-    request: Request,
-    body: dict[str, Any],
-    accept_language: str | None = Header(None, alias="Accept-Language"),
-    app_id: str = Depends(verify_m2m_request),
-):
-    args = body.get("args", {})
-    description = args.get("description", "")
-    locale = args.get("locale") or parse_locale(accept_language)
-    is_zh = locale == "zh"
-
-    progress_initial = (
-        "正在优化展示形式..." if is_zh else "Optimizing display format..."
-    )
-    progress_template = (
-        "正在优化展示形式...（{} 字符）"
-        if is_zh
-        else "Optimizing display format... ({} chars)"
-    )
-    content_ok = (
-        "可视化图表已经在上方渲染展示给用户。数据已通过图表直观呈现。"
-        "请勿重复描述图表中的数据。直接告知用户查看上方图表即可，简短回应。"
-        if is_zh
-        else "A visual chart has been rendered above and is visible to the user. "
-        "The data is already presented visually. "
-        "DO NOT repeat or re-describe the visualized data. "
-        "Simply tell the user to look at the chart above for details."
-    )
-    content_error = (
-        "展示优化失败，请稍后重试。"
-        if is_zh
-        else "Display optimization failed. Please retry later."
-    )
-    timeout_msg = (
-        "展示优化超时，请重试。"
-        if is_zh
-        else "Display optimization timed out. Please retry."
-    )
-    system_prompt = GENERAL_VIZ_SYSTEM_PROMPT_ZH if is_zh else GENERAL_VIZ_SYSTEM_PROMPT
-
-    async def event_stream():
-        try:
-            yield _sse_line(
-                "tool_progress",
-                {"message": progress_initial},
-            )
-
-            adapters = request.app.state.adapters
-            registry = getattr(adapters, "llm_provider_registry", None)
-            if registry is None:
-                yield _sse_line(
-                    "error", {"message": "LLM provider registry not configured"}
-                )
-                return
-
-            viz_provider_name = "openai_viz"
-            if not registry.is_registered(viz_provider_name):
-                viz_provider_name = "openai"
-
-            llm = registry.create(viz_provider_name, {})
-
-            messages = [
-                system_message(system_prompt),
-                user_message([{"type": "text", "text": description}]),
-            ]
-            stream = await llm.chat(
-                messages=messages,
-                tools=[],
-                temperature=0.2,
-                max_tokens=4096,
-            )
-
-            accumulated = ""
-            last_report_len = 0
-            REPORT_INTERVAL = 50
-            stream_iter = stream.__aiter__()
-            while True:
-                try:
-                    chunk = await asyncio.wait_for(stream_iter.__anext__(), timeout=60)
-                except asyncio.TimeoutError:
-                    yield _sse_line("error", {"message": timeout_msg})
-                    return
-                except StopAsyncIteration:
-                    break
-                delta = chunk.content or ""
-                if not delta:
-                    continue
-                accumulated += delta
-                if len(accumulated) - last_report_len >= REPORT_INTERVAL:
-                    yield _sse_line(
-                        "tool_progress",
-                        {"message": progress_template.format(len(accumulated))},
-                    )
-                    last_report_len = len(accumulated)
-
-            raw_html = _extract_html(accumulated)
-
-            yield _sse_line(
-                "tool_end",
-                {
-                    "content": content_ok,
-                    "__meta": {"html": raw_html},
-                },
-            )
-        except Exception:
-            logger.exception("General visualization execution error")
-            yield _sse_line(
-                "tool_end",
-                {
-                    "content": content_error,
-                    "__meta": {"html": ""},
-                },
-            )
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+# NOTE: general_visualization_execute endpoint removed in the 2026-07-15
+# audit round. Customers did not need the built-in LLM-driven HTML
+# visualization tool; specialised UIs can be provided by the customer
+# application or by the regular show_ui_meta path.

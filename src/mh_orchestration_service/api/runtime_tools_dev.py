@@ -19,38 +19,6 @@ def _sse_line(event_type: str, data: Any) -> str:
     return f"data: {json.dumps({'type': event_type, 'data': data}, ensure_ascii=False, default=str)}\n\n"
 
 
-@router.post("/calculator/execute")
-async def calculator_execute(
-    request: Request,
-    body: dict[str, Any],
-    app_id: str = Depends(verify_m2m_request),
-):
-    args = body.get("args", {})
-    expression = args.get("expression", "")
-
-    async def event_stream():
-        try:
-            yield _sse_line(
-                "tool_progress",
-                {"message": f"Evaluating: {expression}"},
-            )
-            allowed = {"__builtins__": {}}
-            result = eval(expression, allowed)  # noqa: PGH001
-            yield _sse_line(
-                "tool_end",
-                {
-                    "status": "ok",
-                    "expression": expression,
-                    "result": result,
-                },
-            )
-        except Exception:
-            logger.exception("Calculator execution error")
-            yield _sse_line("error", {"message": "Internal server error"})
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
 @router.post("/show_ui_meta/execute")
 async def show_ui_meta_execute(
     request: Request,

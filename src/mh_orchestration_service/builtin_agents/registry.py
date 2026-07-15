@@ -188,24 +188,6 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
         "endpoint_url": "/api/v1/tools/show_ui_meta/execute",
     },
     {
-        "name": "general_visualization",
-        "display_name": "General Visualization",
-        "display_name_locale": '{"zh":"通用可视化","en":"General Visualization"}',
-        "description": "Display information in a visually optimized format",
-        "description_locale": '{"zh":"以更直观的视觉形式展示信息","en":"Display information in a visually optimized format"}',
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string",
-                    "description": "Description of the visualization to generate",
-                }
-            },
-            "required": ["description"],
-        },
-        "endpoint_url": "/api/v1/tools/general_visualization/execute",
-    },
-    {
         "name": "stop_agent",
         "display_name": "Stop Agent",
         "display_name_locale": '{"zh":"停止执行","en":"Stop Agent"}',
@@ -241,7 +223,6 @@ BUILTIN_SCENARIOS: list[dict[str, Any]] = [
                     "calculator",
                     "web_search",
                     "show_ui_meta",
-                    "general_visualization",
                     "stop_agent",
                 ],
             },
