@@ -324,9 +324,10 @@ async def create_runtime(
 
         def _resolver(meta: AgentMetadata) -> LLMProvider:
             cfg: dict = {
-                "model": meta.model,
                 "_extra_headers_provider": llm_extra_headers,
             }
+            if meta.model:
+                cfg["model"] = meta.model
             cfg.update(meta.llm_config)
             return llm_provider_registry.create(meta.provider, cfg)
 

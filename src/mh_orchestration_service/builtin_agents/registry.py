@@ -4,6 +4,11 @@ import asyncio
 import json
 from typing import Any, AsyncIterator
 
+from minimal_harness.tool.built_in.bash import bash_handler
+from minimal_harness.tool.built_in.local_file_operation import (
+    local_file_operation_handler,
+)
+
 
 async def _web_search_fn(query: str = "") -> AsyncIterator[Any]:
     await asyncio.sleep(0.05)
@@ -124,6 +129,72 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
         "_fn": _web_search_fn,
     },
     {
+        "name": "bash",
+        "display_name": "Bash",
+        "display_name_locale": '{"zh":"命令行","en":"Bash"}',
+        "description": "Execute a shell command and return the terminal output (stdout + stderr). Compatible with Windows, Linux, and macOS.",
+        "description_locale": '{"zh":"执行 shell 命令并返回终端输出（stdout + stderr）。兼容 Windows、Linux 和 macOS。","en":"Execute a shell command and return the terminal output (stdout + stderr). Compatible with Windows, Linux, and macOS."}',
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "The shell command to execute",
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Timeout in seconds",
+                },
+                "workdir": {
+                    "type": "string",
+                    "description": "Working directory for the command (optional)",
+                },
+            },
+            "required": ["command"],
+        },
+        "_fn": bash_handler,
+    },
+    {
+        "name": "local_file_operation",
+        "display_name": "File Operation",
+        "display_name_locale": '{"zh":"文件操作","en":"File Operation"}',
+        "description": "Perform local file operations: read, write, patch, delete.",
+        "description_locale": '{"zh":"执行本地文件操作：读取、写入、替换、删除","en":"Perform local file operations: read, write, patch, delete."}',
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "Path to the file"},
+                "mode": {
+                    "type": "string",
+                    "description": "Operation mode",
+                    "enum": ["read", "write", "patch", "delete"],
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Full file content (for 'write')",
+                },
+                "start_line": {
+                    "type": "integer",
+                    "description": "1-based first line (for 'read')",
+                },
+                "end_line": {
+                    "type": "integer",
+                    "description": "1-based last line, inclusive (for 'read')",
+                },
+                "old_string": {
+                    "type": "string",
+                    "description": "Exact string to replace (for 'patch')",
+                },
+                "new_string": {
+                    "type": "string",
+                    "description": "Replacement string (for 'patch')",
+                },
+            },
+            "required": ["file_path", "mode"],
+        },
+        "_fn": local_file_operation_handler,
+    },
+    {
         "name": "handoff",
         "display_name": "Handoff",
         "display_name_locale": '{"zh":"任务移交","en":"Handoff"}',
@@ -220,6 +291,8 @@ BUILTIN_SCENARIOS: list[dict[str, Any]] = [
                     "discover_agents",
                     "calculator",
                     "web_search",
+                    "bash",
+                    "local_file_operation",
                     "show_ui_meta",
                     "stop_agent",
                 ],
@@ -229,6 +302,8 @@ BUILTIN_SCENARIOS: list[dict[str, Any]] = [
                 "tool_names": [
                     "handoff",
                     "discover_agents",
+                    "bash",
+                    "local_file_operation",
                     "stop_agent",
                 ],
             },
@@ -238,6 +313,8 @@ BUILTIN_SCENARIOS: list[dict[str, Any]] = [
                     "handoff",
                     "discover_agents",
                     "web_search",
+                    "bash",
+                    "local_file_operation",
                     "stop_agent",
                 ],
             },

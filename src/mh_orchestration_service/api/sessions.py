@@ -19,6 +19,10 @@ class SessionCreateRequest(BaseModel):
     scenario_id: str | None = None
 
 
+class SessionUpdateRequest(BaseModel):
+    title: str | None = None
+
+
 @router.get("")
 async def list_sessions(
     request: Request,
@@ -90,6 +94,26 @@ async def create_session(
             locale,
         ),
     }
+
+
+@router.put("/{memory_id}")
+async def update_session(
+    request: Request,
+    memory_id: str,
+    body: SessionUpdateRequest,
+    user_id: str = Depends(resolve_request_identity),
+):
+    store = await get_session_store()
+    session = await store.get_session(memory_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if body.title is not None:
+        object.__setattr__(session, "title", body.title)
+        extra = {"title": body.title}
+        await store.save_memory(session.memory, memory_id, extra=extra)
+    return {"ok": True}
 
 
 @router.get("/{memory_id}")

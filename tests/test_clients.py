@@ -140,9 +140,9 @@ class TestRegistryClient:
     @pytest.mark.asyncio
     async def test_list_tools(self):
         tools = await self.client.list_tools()
-        # Built-in tool count after the 2026-07-15 audit (general_visualization removed):
-        # calculator, web_search, handoff, discover_agents, show_ui_meta, stop_agent = 6
-        assert len(tools) == 6
+        # Built-in tool count after adding bash + local_file_operation:
+        # calculator, web_search, bash, local_file_operation, handoff, discover_agents, show_ui_meta, stop_agent = 8
+        assert len(tools) == 8
 
     @pytest.mark.asyncio
     async def test_custom_data(self):
