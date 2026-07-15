@@ -14,7 +14,9 @@ router = APIRouter(prefix="/api/v1/management", tags=["management"])
 
 
 def _strip(d: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in d.items() if not k.startswith("_")}
+    from minimal_harness.serialization import strip_internal_dict
+
+    return strip_internal_dict(d)  # type: ignore[return-value]
 
 
 def _filter_and_page(

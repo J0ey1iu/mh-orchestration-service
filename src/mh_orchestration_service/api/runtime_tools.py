@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 import uuid
@@ -45,7 +44,11 @@ router = APIRouter(prefix="/api/v1/tools", tags=["runtime_tools"])
 
 
 def _sse_line(event_type: str, data: Any) -> str:
-    return f"data: {json.dumps({'type': event_type, 'data': data}, ensure_ascii=False, default=str)}\n\n"
+    # Thin shim around the shared helper in api/_sse.py. Kept as a
+    # local alias so the rest of this module reads naturally.
+    from mh_orchestration_service.api._sse import sse_envelope
+
+    return sse_envelope(event_type, data)
 
 
 @router.post("/discover_agents/execute")

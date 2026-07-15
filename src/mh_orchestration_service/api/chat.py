@@ -27,6 +27,7 @@ from minimal_harness.types import (
 )
 from pydantic import BaseModel
 
+from mh_orchestration_service.api._sse import sse_envelope
 from mh_orchestration_service.api.dependencies import (
     resolve_request_identity,
     resolve_request_permissions,
@@ -186,14 +187,18 @@ def _serialize_event(event: Any) -> dict[str, Any]:
 
 
 def _serialize_chunk(chunk: Any) -> Any:
+    from minimal_harness.serialization import strip_internal
+
     if isinstance(chunk, dict):
-        return {k: v for k, v in chunk.items() if not k.startswith("_")}
+        return strip_internal(chunk)
     return str(chunk)
 
 
 def _serialize_result(result: Any) -> Any:
+    from minimal_harness.serialization import strip_internal
+
     if isinstance(result, dict):
-        return {k: v for k, v in result.items() if not k.startswith("_")}
+        return strip_internal(result)
     if isinstance(result, Exception):
         return f"[Error] {result}"
     if not isinstance(result, str):
@@ -202,9 +207,10 @@ def _serialize_result(result: Any) -> Any:
 
 
 def _format_sse(event: str, data: dict[str, Any]) -> str:
-    return (
-        f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
-    )
+    # Use the canonical {type,data} envelope shared with
+    # runtime_tools.py / tool_generator.py / agent_generator.py.
+    # See api/_sse.py for the rationale.
+    return sse_envelope(event, data)
 
 
 async def _get_scenario_for_session(
