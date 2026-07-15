@@ -339,12 +339,25 @@ async def _stream_events(
             tool_names=tool_names,
         )
 
+        # Buffer of MessageEvents seen during this stream.  Local agents
+        # (SimpleAgent / CompactionAgent) already call
+        # ``memory.add_message`` for every emitted MessageEvent, so on
+        # the persistence side replaying them would double-write.
+        # Remote agents (SSEAgentDriver) emit MessageEvents without
+        # writing to local memory at all.  We collect the events here
+        # and replay them after the queue drains, deduping by the
+        # Python object id against the messages already in
+        # ``session.get_replay_messages()``.
+        message_events: list[MessageEvent] = []
+
         while True:
             event = await queue.get()
             if event is None:
                 break
 
             if isinstance(event, MessageEvent):
+                # Buffer for replay at the end of the stream.
+                message_events.append(event)
                 continue
 
             event_type = type(event).__name__
@@ -365,6 +378,27 @@ async def _stream_events(
                 list(payload.keys()),
             )
             yield _format_sse(event_type, payload)
+
+        # Replay MessageEvents for persistence.  Build the set of
+        # object ids already in the session's replay history first, so
+        # we only persist messages the local agent loop did NOT already
+        # add (i.e. messages that came from a remote agent).
+        if message_events:
+            existing_ids = {id(m) for m in session.get_replay_messages()}
+            added = 0
+            for mevent in message_events:
+                msg = mevent.message
+                if msg is None or id(msg) in existing_ids:
+                    continue
+                await session.add_message(msg)
+                existing_ids.add(id(msg))
+                added += 1
+            if added:
+                logger.info(
+                    "chat.message_replay memory_id=%s added=%d",
+                    memory_id,
+                    added,
+                )
     except Exception:
         logger.exception("Chat stream error")
         yield _format_sse("Error", {"message": "An internal error occurred."})

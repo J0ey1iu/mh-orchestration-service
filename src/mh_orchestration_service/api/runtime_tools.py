@@ -17,6 +17,7 @@ from minimal_harness.types import (
     LLMChunk,
     LLMEnd,
     LLMStart,
+    MessageEvent,
     ToolEnd,
     ToolStart,
 )
@@ -206,6 +207,13 @@ async def handoff_execute(
                         "context": context_summary,
                     },
                 )
+
+                # Buffer of MessageEvents seen during the delegated
+                # run.  Same rationale as in chat.py: local agents
+                # already call add_message, remote agents don't; we
+                # replay here to ensure the delegated session's
+                # memory is persisted regardless of agent locality.
+                sub_message_events: list[MessageEvent] = []
 
                 while True:
                     try:
@@ -397,6 +405,33 @@ async def handoff_execute(
                                 "error": event.error,
                             },
                         )
+                    elif isinstance(event, MessageEvent):
+                        # Buffer for replay after the stream drains;
+                        # we don't surface it as a tool_progress event
+                        # (caller's chat stream already emits the
+                        # message), but we DO need it for persistence.
+                        sub_message_events.append(event)
+
+                # Replay MessageEvents for the delegated session.  See
+                # chat.py for the same logic and rationale.
+                if sub_message_events:
+                    session = await store.get_session(handoff_session_id)
+                    if session is not None:
+                        existing_ids = {id(m) for m in session.get_replay_messages()}
+                        added = 0
+                        for mevent in sub_message_events:
+                            msg = mevent.message
+                            if msg is None or id(msg) in existing_ids:
+                                continue
+                            await session.add_message(msg)
+                            existing_ids.add(id(msg))
+                            added += 1
+                        if added:
+                            logger.info(
+                                "handoff.message_replay session_id=%s added=%d",
+                                handoff_session_id,
+                                added,
+                            )
 
                 session = await store.get_session(handoff_session_id)
                 if session:
