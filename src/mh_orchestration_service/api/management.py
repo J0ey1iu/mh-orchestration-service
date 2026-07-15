@@ -79,7 +79,6 @@ class AgentCreate(BaseModel):
     description_locale: str = ""
     system_prompt: str = ""
     system_prompt_locale: str = ""
-    endpoint_url: str = ""
     provider: str = "openai"
     model: str = ""
     llm_config: dict[str, Any] = {}
@@ -94,7 +93,6 @@ class AgentUpdate(BaseModel):
     description_locale: str | None = None
     system_prompt: str | None = None
     system_prompt_locale: str | None = None
-    endpoint_url: str | None = None
     provider: str | None = None
     model: str | None = None
     llm_config: dict[str, Any] | None = None
@@ -382,7 +380,7 @@ async def list_agents(
             q=q,
             page=page,
             page_size=page_size,
-            search_fields=["name", "display_name", "description", "endpoint_url"],
+            search_fields=["name", "display_name", "description"],
         )
     )
 

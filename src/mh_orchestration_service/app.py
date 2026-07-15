@@ -496,9 +496,16 @@ def create_app(
         openapi_tags=TAGS_METADATA,
         lifespan=lifespan,
     )
+    # In dev mode, auto-allow the Vite dev server origin so the frontend
+    # works without manual CORS config.
+    _cors_origins = settings.cors_origins[:]
+    if settings.dev_mode:
+        for origin in ["http://localhost:5173", "http://127.0.0.1:5173"]:
+            if origin not in _cors_origins:
+                _cors_origins.append(origin)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=_cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

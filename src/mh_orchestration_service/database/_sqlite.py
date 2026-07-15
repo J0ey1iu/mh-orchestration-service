@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from typing import Any
 
 from mh_orchestration_service.database._protocol import DatabaseProtocol
@@ -155,6 +156,7 @@ class SqliteDatabase(DatabaseProtocol):
         finally:
             await self._release(conn)
 
+    @asynccontextmanager
     async def transaction(self):
         """Async context manager that holds a single connection across
         ``begin``/``commit``/``rollback`` semantics.
@@ -165,25 +167,19 @@ class SqliteDatabase(DatabaseProtocol):
         handle, so a connection-pool implementation must pin the
         connection for the lifetime of the transaction.
         """
-        from contextlib import asynccontextmanager
-
-        @asynccontextmanager
-        async def _ctx():
-            conn = await self._acquire()
+        conn = await self._acquire()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            yield conn
+            await conn.commit()
+        except Exception:
             try:
-                await conn.execute("BEGIN IMMEDIATE")
-                yield conn
-                await conn.commit()
+                await conn.rollback()
             except Exception:
-                try:
-                    await conn.rollback()
-                except Exception:
-                    pass
-                raise
-            finally:
-                await self._release(conn)
-
-        return _ctx()
+                pass
+            raise
+        finally:
+            await self._release(conn)
 
     async def begin(self) -> None:
         """Deprecated: prefer ``async with db.transaction(): ...``.

@@ -18,7 +18,6 @@ from minimal_harness.types import (
     CompactionSettings,
     LocalAgentBinding,
     LocalToolBinding,
-    RemoteAgentBinding,
     RemoteToolBinding,
     ToolMetadata,
 )
@@ -99,29 +98,7 @@ async def _agent_binding(
     identity: str = "",
     outbound_auth_provider: OutboundAuthProvider | None = None,
     verify_agent_tool_ssl: bool = False,
-) -> RemoteAgentBinding | LocalAgentBinding:
-    if "endpoint_url" in meta and meta["endpoint_url"]:
-        url = meta["endpoint_url"]
-        if request and url.startswith("/"):
-            url = str(request.base_url).rstrip("/") + url
-        headers: dict[str, str] = {}
-        if m2m_auth_provider is not None and request is not None and identity:
-            headers = await m2m_auth_provider.get_identity_headers(request, identity)
-        if request is not None and "x-user-id" not in headers:
-            _xu = request.headers.get("x-user-id", "").strip()
-            if _xu:
-                headers["x-user-id"] = _xu
-        extra_provider = None
-        if outbound_auth_provider is not None and request is not None:
-            extra_provider = _make_extra_headers_provider(
-                outbound_auth_provider, request, url, "agent"
-            )
-        return RemoteAgentBinding(
-            url=url,
-            headers=headers,
-            extra_headers_provider=extra_provider,
-            verify_ssl=verify_agent_tool_ssl,
-        )
+) -> LocalAgentBinding:
     return LocalAgentBinding()
 
 
@@ -275,14 +252,7 @@ async def create_runtime(
                 model=a.get("model", ""),
                 llm_config=a.get("llm_config", {}),
                 compaction=_resolve_compaction_settings(a),
-                binding=await _agent_binding(
-                    a,
-                    request,
-                    m2m_auth_provider=adapters.m2m_auth_provider,
-                    identity=user_id,
-                    outbound_auth_provider=outbound_auth_provider,
-                    verify_agent_tool_ssl=verify_agent_tool_ssl,
-                ),
+                binding=await _agent_binding(a),
             )
         )
 

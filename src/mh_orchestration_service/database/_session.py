@@ -146,5 +146,8 @@ class SimpleSession:
             total_tokens=total_tokens,
         )
 
+    def get_replay_messages(self) -> list[Message]:
+        return self._memory.get_replay_messages()
+
     def reset_message_usage(self) -> None:
         self._memory.reset_message_usage()

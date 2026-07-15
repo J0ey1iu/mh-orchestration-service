@@ -346,14 +346,11 @@ async def _stream_events(
         )
 
         # Buffer of MessageEvents seen during this stream.  Local agents
-        # (SimpleAgent / CompactionAgent) already call
-        # ``memory.add_message`` for every emitted MessageEvent, so on
-        # the persistence side replaying them would double-write.
-        # Remote agents (SSEAgentDriver) emit MessageEvents without
-        # writing to local memory at all.  We collect the events here
-        # and replay them after the queue drains, deduping by the
-        # Python object id against the messages already in
-        # ``session.get_replay_messages()``.
+        # already call ``memory.add_message`` for every emitted
+        # MessageEvent, so on the persistence side replaying them would
+        # double-write.  We collect events here and replay them after
+        # the queue drains, deduping by Python object id against the
+        # messages already in ``session.get_replay_messages()``.
         message_events: list[MessageEvent] = []
 
         while True:

@@ -15,7 +15,6 @@ from minimal_harness.types import AgentMetadata, ToolMetadata
 from mh_orchestration_service.api.dependencies import (
     get_current_permissions,
     get_current_user,
-    resolve_m2m_identity,
 )
 from mh_orchestration_service.api.locale import (
     parse_locale,
@@ -90,7 +89,7 @@ async def run_agent(
     agent_name: str,
     request: Request,
     body: dict[str, Any],
-    identity: str = Depends(resolve_m2m_identity),
+    identity: str = Depends(get_current_user),
 ):
     logger.debug(
         "INBOUND run_agent request — agent=%s identity=%s user_input_count=%d tools_count=%d memory_count=%d",
