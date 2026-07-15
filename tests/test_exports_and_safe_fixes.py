@@ -199,25 +199,31 @@ class TestRegistryProviderDeprecation:
 
 
 @pytest.mark.asyncio
-async def test_warn_unknown_adapter_slots_logs_warning(caplog):
-    from mh_orchestration_service.app import _warn_unknown_adapter_slots
+async def test_unknown_adapter_slots_are_silently_dropped():
+    """With AppState as a Pydantic BaseModel (``extra='ignore'``), unknown
+    attributes assigned via setattr are dropped rather than warned about.
+
+    The old ``_warn_unknown_adapter_slots`` machinery was removed in the
+    2026-07-15 audit round (P18): the typed model surface is the
+    contract, and assigning to a typo'd slot becomes a silent
+    programmer error. Tests below document that the *known* slots still
+    raise clearly.
+    """
     from mh_orchestration_service.config import ConfigSchema
 
     state = AppState(settings=ConfigSchema())
+    # Pydantic BaseModel with extra="ignore" silently drops unknown fields.
     state.foo = "typo"  # type: ignore[attr-defined]
     state.bar = "another typo"  # type: ignore[attr-defined]
-    with caplog.at_level("WARNING", logger="orchestration.app"):
-        _warn_unknown_adapter_slots(state)
-    assert any("foo" in r.message and "bar" in r.message for r in caplog.records)
+    assert not hasattr(state, "foo")
+    assert not hasattr(state, "bar")
 
 
 @pytest.mark.asyncio
-async def test_warn_unknown_adapter_slots_silent_for_known(caplog):
-    from mh_orchestration_service.app import _warn_unknown_adapter_slots
+async def test_known_adapter_slots_persist():
+    """Known adapter slots survive assignment."""
     from mh_orchestration_service.config import ConfigSchema
 
     state = AppState(settings=ConfigSchema())
     state.token_verifier = None
-    with caplog.at_level("WARNING", logger="orchestration.app"):
-        _warn_unknown_adapter_slots(state)
-    assert not any("unknown AppState" in r.message for r in caplog.records)
+    assert state.token_verifier is None

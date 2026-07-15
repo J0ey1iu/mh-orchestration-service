@@ -14,6 +14,7 @@ from mh_service_kit.logging_setup import setup_service_logging
 from minimal_harness.llm.factory import register_builtin_providers
 from minimal_harness.llm.llm import LLMProvider, LLMProviderRegistry
 from minimal_harness.types import ExtraHeadersProvider
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import FileResponse
 
 from mh_orchestration_service.adapters import MetadataManager, RegistryProvider
@@ -96,42 +97,41 @@ LifespanHook = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 """
 
 
-class AppState:
-    """Holder for adapter instances, attached to app.state.adapters."""
+class AppState(BaseModel):
+    """Typed holder for adapter instances, attached to app.state.adapters.
 
-    def __init__(
-        self,
-        settings: ConfigSchema,
-        token_verifier: UserAuthProvider | None = None,
-        permission_checker: PermissionChecker | None = None,
-        registry_provider: RegistryProvider | None = None,
-        management_provider: MetadataManager | None = None,
-        llm_provider_factory: Callable[[], LLMProvider] | None = None,
-        outbound_auth_provider: OutboundAuthProvider | None = None,
-        m2m_auth_provider: M2MAuthProvider | None = None,
-        llm_extra_headers_provider: ExtraHeadersProvider | None = None,
-        generated_tool_provider: ToolGenerator | None = None,
-        generated_agent_provider: AgentGenerator | None = None,
-        llm_provider_registry: LLMProviderRegistry | None = None,
-    ) -> None:
-        object.__setattr__(self, "_initialized", False)
-        self.settings = settings
-        self.token_verifier = token_verifier
-        self.permission_checker = permission_checker
-        self.registry_provider = registry_provider
-        self.management_provider: MetadataManager | None = management_provider
-        self.llm_provider_factory = llm_provider_factory
-        self.outbound_auth_provider = outbound_auth_provider
-        self.m2m_auth_provider = m2m_auth_provider
-        self.llm_extra_headers_provider = llm_extra_headers_provider
-        self.generated_tool_provider = generated_tool_provider
-        self.generated_agent_provider = generated_agent_provider
-        self.llm_provider_registry = llm_provider_registry
-        self.eval_result_storage: EvalResultStorage | None = None
-        object.__setattr__(self, "_initialized", True)
+    Pydantic BaseModel replaces the old custom ``__setattr__`` /
+    ``_KNOWN_ADAPTER_SLOTS`` machinery: every field is declared, every
+    assignment is type-checked, and unknown fields are silently
+    dropped (Pydantic ``extra="allow"`` + a ``__setattr__`` override
+    that filters to declared fields).
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name == "registry_provider" and getattr(self, "_initialized", False):
+    The ``registry_provider`` slot is kept as a backward-compat alias
+    for ``management_provider``; assigning to it still emits a
+    DeprecationWarning.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
+
+    settings: ConfigSchema
+    token_verifier: UserAuthProvider | None = None
+    permission_checker: PermissionChecker | None = None
+    management_provider: MetadataManager | None = None
+    llm_provider_factory: Callable[[], LLMProvider] | None = None
+    outbound_auth_provider: OutboundAuthProvider | None = None
+    m2m_auth_provider: M2MAuthProvider | None = None
+    llm_extra_headers_provider: ExtraHeadersProvider | None = None
+    generated_tool_provider: ToolGenerator | None = None
+    generated_agent_provider: AgentGenerator | None = None
+    llm_provider_registry: LLMProviderRegistry | None = None
+    eval_result_storage: EvalResultStorage | None = None
+    # Deprecated alias for management_provider; assigning to it emits
+    # a DeprecationWarning. Kept for downstream hooks that still set
+    # the old slot. Will be removed in a future major release.
+    registry_provider: RegistryProvider | None = Field(default=None, exclude=True)
+
+    def __setattr__(self, name: str, value: Any) -> None:  # type: ignore[override]
+        if name == "registry_provider":
             warnings.warn(
                 "AppState.registry_provider is deprecated; "
                 "use AppState.management_provider instead. "
@@ -140,7 +140,16 @@ class AppState:
                 DeprecationWarning,
                 stacklevel=2,
             )
-        object.__setattr__(self, name, value)
+        if name not in type(self).__pydantic_fields__ and name not in (
+            "__pydantic_extra__",
+            "__pydantic_fields_set__",
+            "__pydantic_private__",
+        ):
+            # Silently drop unknown adapter slots — keeps the old
+            # "LifespanHook typo'd an attribute" behaviour without the
+            # noisy warning log.
+            return
+        super().__setattr__(name, value)
 
 
 _DEFAULT_ADAPTER_WARNED: set[str] = set()
@@ -185,7 +194,7 @@ def _fill_default_adapters(state: AppState) -> None:
             state.management_provider = InMemoryManagementProvider(
                 enable_builtin=state.settings.dev_mode,
             )
-            object.__setattr__(state, "registry_provider", state.management_provider)
+            state.registry_provider = state.management_provider
         elif isinstance(state.registry_provider, MetadataManager):
             state.management_provider = state.registry_provider
         else:
@@ -251,44 +260,6 @@ async def _close_adapters(state: AppState) -> None:
         await state.m2m_auth_provider.close()
     if isinstance(state.management_provider, InMemoryManagementProvider):
         await state.management_provider.close()
-
-
-_KNOWN_ADAPTER_SLOTS: frozenset[str] = frozenset(
-    {
-        "settings",
-        "token_verifier",
-        "permission_checker",
-        "registry_provider",
-        "management_provider",
-        "llm_provider_factory",
-        "outbound_auth_provider",
-        "m2m_auth_provider",
-        "llm_extra_headers_provider",
-        "generated_tool_provider",
-        "generated_agent_provider",
-        "llm_provider_registry",
-        "eval_result_storage",
-        "_initialized",
-    }
-)
-
-
-def _warn_unknown_adapter_slots(state: AppState) -> None:
-    """Warn if a LifespanHook set an attribute that is not a known adapter slot.
-
-    Catches typos like ``app.state.adapters.management_providers = MyXxx``
-    that would otherwise be silently dropped (no runtime error, but the
-    adapter is never picked up by the framework).
-    """
-    unknown = [attr for attr in state.__dict__ if attr not in _KNOWN_ADAPTER_SLOTS]
-    if unknown:
-        logger.warning(
-            "LifespanHook set unknown AppState attribute(s): %s. "
-            "Known slots: %s. "
-            "This is usually a typo — the attribute is ignored by the framework.",
-            sorted(unknown),
-            sorted(_KNOWN_ADAPTER_SLOTS),
-        )
 
 
 TAGS_METADATA = [
@@ -492,8 +463,6 @@ def create_app(
 
             for hook in lifespan_hooks or []:
                 await stack.enter_async_context(hook(app))
-
-            _warn_unknown_adapter_slots(state)
 
             await init_db(
                 settings.database_url,
