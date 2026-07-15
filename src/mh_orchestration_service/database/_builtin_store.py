@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, cast
 from uuid import uuid4
 
@@ -14,7 +15,34 @@ from mh_orchestration_service.database._session import (
     SimpleSession,
 )
 
+logger = logging.getLogger(__name__)
+
 SYSTEM_USER_ID = 0
+
+
+def _no_such_table_error_classes() -> tuple[type[BaseException], ...]:
+    """Return the exception classes that signal "no such table".
+
+    Centralised here so we don't sprinkle string-matching across the
+    schema-migration code paths.  Both ``sqlite3.OperationalError`` and
+    ``aiosqlite.OperationalError`` are surfaced; other backends
+    (e.g. asyncpg) raise their own class which callers can extend.
+    """
+    classes: list[type[BaseException]] = []
+    try:
+        import sqlite3
+
+        classes.append(sqlite3.OperationalError)
+    except ImportError:  # pragma: no cover
+        pass
+    try:
+        import aiosqlite
+
+        # aiosqlite re-exports the sqlite3 exception hierarchy.
+        classes.append(aiosqlite.OperationalError)
+    except ImportError:  # pragma: no cover
+        pass
+    return tuple(classes)
 
 
 class BuiltinSessionStore:
@@ -32,7 +60,13 @@ class BuiltinSessionStore:
     async def init_schema(self) -> None:
         try:
             await self._db.fetch_one("SELECT creation_date FROM sessions LIMIT 1")
-        except Exception:
+        except _no_such_table_error_classes() as exc:
+            # The pre-existing schema (from a previous deploy) didn't
+            # have these tables yet — wipe any partial state and let
+            # CREATE TABLE below create them. Only react to actual
+            # "no such table" errors; transient I/O / lock contention
+            # must propagate, never silently wipe prod data.
+            logger.warning("builtin_store.init_schema.missing_tables error=%s", exc)
             await self._db.execute("DROP TABLE IF EXISTS session_messages")
             await self._db.execute("DROP TABLE IF EXISTS sessions")
 
@@ -78,14 +112,14 @@ class BuiltinSessionStore:
 
         try:
             await self._db.fetch_one("SELECT transient FROM sessions LIMIT 1")
-        except Exception:
+        except _no_such_table_error_classes():
             await self._db.execute(
                 "ALTER TABLE sessions ADD COLUMN transient TEXT DEFAULT 'N'"
             )
 
         try:
             await self._db.fetch_one("SELECT sort_order FROM session_messages LIMIT 1")
-        except Exception:
+        except _no_such_table_error_classes():
             await self._db.execute(
                 "ALTER TABLE session_messages ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"
             )
@@ -94,7 +128,7 @@ class BuiltinSessionStore:
             await self._db.fetch_one(
                 "SELECT agent_display_name_locale FROM sessions LIMIT 1"
             )
-        except Exception:
+        except _no_such_table_error_classes():
             await self._db.execute(
                 "ALTER TABLE sessions ADD COLUMN agent_display_name_locale TEXT DEFAULT ''"
             )
@@ -220,8 +254,7 @@ class BuiltinSessionStore:
 
         base_order = memory.get_persisted_count()
 
-        await self._db.begin()
-        try:
+        async with self._db.transaction() as conn:
             if new_msgs:
                 rows = []
                 for idx, m in enumerate(new_msgs):
@@ -240,7 +273,7 @@ class BuiltinSessionStore:
                             trace_id,
                         ]
                     )
-                await self._db.executemany(
+                await conn.executemany(
                     """INSERT INTO session_messages
                        (id, session_id, data, sort_order,
                         created_by, last_updated_by, creation_date, last_update_date,
@@ -252,20 +285,15 @@ class BuiltinSessionStore:
                 )
 
             if title:
-                await self._db.execute(
+                await conn.execute(
                     "UPDATE sessions SET title = ?, last_updated_by = ?, last_update_date = ?, status = 'idle', last_update_trace_id = ? WHERE session_id = ?",
                     [title, audit_id, now, trace_id, session_id],
                 )
             else:
-                await self._db.execute(
+                await conn.execute(
                     "UPDATE sessions SET last_updated_by = ?, last_update_date = ?, status = 'idle', last_update_trace_id = ? WHERE session_id = ?",
                     [audit_id, now, trace_id, session_id],
                 )
-
-            await self._db.commit()
-        except Exception:
-            await self._db.rollback()
-            raise
 
         if new_msgs:
             memory.mark_all_persisted()
