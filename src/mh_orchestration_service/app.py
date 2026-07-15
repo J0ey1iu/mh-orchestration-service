@@ -143,17 +143,43 @@ class AppState:
         object.__setattr__(self, name, value)
 
 
+_DEFAULT_ADAPTER_WARNED: set[str] = set()
+
+
+def _warn_default_adapter_filled(slot: str) -> None:
+    """Emit a CRITICAL log the first time a built-in default adapter
+    is installed into a given slot.
+
+    These adapters are *intentionally* insecure (X-User-Id trust, no
+    M2M auth, header-forwarding outbound) so they make local
+    development frictionless, but they MUST be replaced for any
+    production deploy.  The log makes that fact unmissable.
+    """
+    if slot in _DEFAULT_ADAPTER_WARNED:
+        return
+    _DEFAULT_ADAPTER_WARNED.add(slot)
+    logger.critical(
+        "default_adapter.in_use slot=%s — built-in insecure adapter "
+        "installed. Replace with a production adapter before going live. "
+        "See docs/customer-adaptation-guide.md.",
+        slot,
+    )
+
+
 def _fill_default_adapters(state: AppState) -> None:
     """Fill any None adapters with built-in defaults."""
     if state.token_verifier is None and state.permission_checker is None:
         auth = _DefaultAuthProvider()
         state.token_verifier = auth
         state.permission_checker = auth
+        _warn_default_adapter_filled("token_verifier+permission_checker")
     else:
         if state.token_verifier is None:
             state.token_verifier = _DefaultAuthProvider()
+            _warn_default_adapter_filled("token_verifier")
         if state.permission_checker is None:
             state.permission_checker = _DefaultAuthProvider()
+            _warn_default_adapter_filled("permission_checker")
     if state.management_provider is None:
         if state.registry_provider is None:
             state.management_provider = InMemoryManagementProvider(
@@ -170,8 +196,10 @@ def _fill_default_adapters(state: AppState) -> None:
             )
     if state.outbound_auth_provider is None:
         state.outbound_auth_provider = _DefaultOutboundAuthProvider()
+        _warn_default_adapter_filled("outbound_auth_provider")
     if state.m2m_auth_provider is None:
         state.m2m_auth_provider = _DefaultM2MAuthProvider()
+        _warn_default_adapter_filled("m2m_auth_provider")
 
     if state.llm_provider_registry is None:
         registry = LLMProviderRegistry()

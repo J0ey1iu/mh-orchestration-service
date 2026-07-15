@@ -108,6 +108,13 @@ python -c "from mh_orchestration_service import create_app; print('OK')"
 
 验证用户身份（JWT/SAML/OIDC/Cookie），返回用户身份。
 
+> **Production note**: the built-in `_DefaultAuthProvider` does **not**
+> verify any of these — it trusts the inbound `X-User-Id` header
+> verbatim. The orchestrator logs a `CRITICAL` `default_adapter.in_use`
+> message the first time a built-in default adapter is installed.
+> Provide a real implementation (JWT, SAML, OIDC, mTLS) for any
+> production deployment.
+
 ```python
 from mh_orchestration_service.auth import UserAuthProvider, UserIdentity
 

@@ -63,22 +63,33 @@ class _DefaultM2MAuthProvider:
         pass
 
     async def authenticate(self, request: Any) -> str | None:
+        # Log header NAMES only — never values.  Authorization /
+        # Cookie / x-user-id are common and would otherwise leak into
+        # INFO logs.
+        header_names = sorted(
+            k for k in dict(request.headers).keys() if isinstance(k, str)
+        )
         logger.info(
-            "M2M authenticate: method=%s url=%s headers=%s client=%s",
+            "M2M authenticate: method=%s url=%s header_count=%d headers=%s client=%s",
             request.method,
             str(request.url),
-            dict(request.headers),
+            len(header_names),
+            header_names,
             request.client.host if request.client else None,
         )
         return "default"
 
     async def get_identity_headers(self, request: Any, identity: str) -> dict[str, str]:
+        header_names = sorted(
+            k for k in dict(request.headers).keys() if isinstance(k, str)
+        )
         logger.info(
-            "M2M get_identity_headers: identity=%s method=%s url=%s headers=%s client=%s",
+            "M2M get_identity_headers: identity=%s method=%s url=%s header_count=%d headers=%s client=%s",
             identity,
             request.method,
             str(request.url),
-            dict(request.headers),
+            len(header_names),
+            header_names,
             request.client.host if request.client else None,
         )
         return {}
