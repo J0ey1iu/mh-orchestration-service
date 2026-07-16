@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import warnings
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from pathlib import Path
@@ -12,11 +11,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from mh_service_kit.logging_setup import setup_service_logging
 from minimal_harness.llm.factory import register_builtin_providers
-from minimal_harness.llm.llm import LLMProvider, LLMProviderRegistry
+from minimal_harness.llm.llm import LLMProvider, ProviderFactory
 from minimal_harness.types import ExtraHeadersProvider
 from starlette.responses import FileResponse
 
-from mh_orchestration_service.adapters import MetadataManager, RegistryProvider
+from mh_orchestration_service.adapters import (
+    MetadataManager,
+    ProviderStore,
+    RegistryProvider,
+)
 from mh_orchestration_service.api.auth_routes import dev_router
 from mh_orchestration_service.api.component_sources import component_sources_router
 from mh_orchestration_service.api.router import router
@@ -59,28 +62,6 @@ from mh_orchestration_service.services.outbound_auth import (
 logger = logging.getLogger("orchestration.app")
 
 
-def _load_provider_defaults(prefix: str = "ORCH_PROVIDER") -> dict[str, dict[str, Any]]:
-    """Scan env vars and build provider default configs.
-
-    Env var naming: ``{PREFIX}_{PROVIDER}__{KEY}``
-    e.g. ``ORCH_PROVIDER_OPENAI__API_KEY=sk-xxx``.
-    """
-    result: dict[str, dict[str, Any]] = {}
-    marker = f"{prefix}_"
-    sep = "__"
-    for key, value in os.environ.items():
-        if not key.startswith(marker):
-            continue
-        suffix = key[len(marker) :]
-        if sep not in suffix:
-            continue
-        provider, cfg_key = suffix.split(sep, 1)
-        provider = provider.lower()
-        cfg_key = cfg_key.lower()
-        result.setdefault(provider, {})[cfg_key] = value
-    return result
-
-
 LifespanHook = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 """生命周期钩子类型。
 
@@ -112,7 +93,8 @@ class AppState:
         llm_extra_headers_provider: ExtraHeadersProvider | None = None,
         generated_tool_provider: ToolGenerator | None = None,
         generated_agent_provider: AgentGenerator | None = None,
-        llm_provider_registry: LLMProviderRegistry | None = None,
+        llm_provider_registry: ProviderFactory | None = None,
+        provider_store: ProviderStore | None = None,
     ) -> None:
         object.__setattr__(self, "_initialized", False)
         self.settings = settings
@@ -120,6 +102,7 @@ class AppState:
         self.permission_checker = permission_checker
         self.registry_provider = registry_provider
         self.management_provider: MetadataManager | None = management_provider
+        self.provider_store: ProviderStore | None = provider_store
         self.llm_provider_factory = llm_provider_factory
         self.outbound_auth_provider = outbound_auth_provider
         self.m2m_auth_provider = m2m_auth_provider
@@ -168,22 +151,23 @@ def _fill_default_adapters(state: AppState) -> None:
                 "registry_provider is not a MetadataManager; "
                 "management CRUD APIs will not be available"
             )
+    if state.provider_store is None:
+        from mh_orchestration_service.services.provider_store import (
+            InMemoryProviderStore,
+        )
+
+        state.provider_store = InMemoryProviderStore(
+            enable_builtin=state.settings.dev_mode,
+        )
     if state.outbound_auth_provider is None:
         state.outbound_auth_provider = _DefaultOutboundAuthProvider()
     if state.m2m_auth_provider is None:
         state.m2m_auth_provider = _DefaultM2MAuthProvider()
 
     if state.llm_provider_registry is None:
-        registry = LLMProviderRegistry()
-        register_builtin_providers(registry)
-        registry.clone_factory("openai", "openai_viz")
-        for name, cfg in _load_provider_defaults().items():
-            registry.set_default_config(name, cfg)
-        if registry.get_default_config("openai"):
-            registry.set_default_config(
-                "openai_viz", registry.get_default_config("openai")
-            )
-        state.llm_provider_registry = registry
+        factory = ProviderFactory()
+        register_builtin_providers(factory)
+        state.llm_provider_registry = factory
 
     if state.llm_provider_factory is None:
         _registry = state.llm_provider_registry
@@ -223,6 +207,8 @@ async def _close_adapters(state: AppState) -> None:
         await state.m2m_auth_provider.close()
     if isinstance(state.management_provider, InMemoryManagementProvider):
         await state.management_provider.close()
+    if isinstance(state.provider_store, ProviderStore):
+        await state.provider_store.close()
 
 
 _KNOWN_ADAPTER_SLOTS: frozenset[str] = frozenset(
@@ -232,6 +218,7 @@ _KNOWN_ADAPTER_SLOTS: frozenset[str] = frozenset(
         "permission_checker",
         "registry_provider",
         "management_provider",
+        "provider_store",
         "llm_provider_factory",
         "outbound_auth_provider",
         "m2m_auth_provider",
@@ -368,6 +355,7 @@ def create_app(
     generated_tool_provider: LifespanHook | None = None,
     generated_agent_provider: LifespanHook | None = None,
     llm_provider_registry: LifespanHook | None = None,
+    provider_store: LifespanHook | None = None,
     eval_result_storage: LifespanHook | None = None,
     lifespan_hooks: list[LifespanHook] | None = None,
 ) -> FastAPI:
@@ -454,6 +442,9 @@ def create_app(
                 await stack.enter_async_context(generated_tool_provider(app))
             if generated_agent_provider is not None:
                 await stack.enter_async_context(generated_agent_provider(app))
+
+            if provider_store is not None:
+                await stack.enter_async_context(provider_store(app))
 
             if eval_result_storage is not None:
                 await stack.enter_async_context(eval_result_storage(app))

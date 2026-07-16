@@ -182,6 +182,7 @@ async def create_runtime(
     llm_provider_registry = getattr(adapters, "llm_provider_registry", None)
     llm_extra_headers = getattr(adapters, "llm_extra_headers_provider", None)
     outbound_auth_provider = getattr(adapters, "outbound_auth_provider", None)
+    provider_store = getattr(adapters, "provider_store", None)
     verify_agent_tool_ssl = getattr(adapters.settings, "verify_agent_tool_ssl", False)
 
     agent_registry = AgentRegistry()
@@ -215,6 +216,10 @@ async def create_runtime(
             user_perms = await adapters.permission_checker.get_permissions(user_id)
         # user_perms stays None when no permission_checker — all agents pass
 
+    # Resolve provider credentials for agents that reference a configured provider.
+    # Built before the resolver (which is synchronous) so we can look up creds by agent name.
+    _resolved_creds: dict[str, dict[str, str]] = {}
+
     # Register agents — filtered by scenario + permissions
     for a in await adapters.management_provider.list_agents():
         name = a["name"]
@@ -224,6 +229,18 @@ async def create_runtime(
             user_perms, f"use:agent:{name}"
         ):
             continue
+        # Resolve provider reference: check provider_name first, then provider field.
+        # Both can reference a configured ProviderStore entity.
+        provider_ref = a.get("provider_name", "") or a.get("provider", "")
+        provider_type = a.get("provider", "openai")
+        if provider_ref and provider_store is not None:
+            entity = await provider_store.get_provider(provider_ref)
+            if entity is not None:
+                provider_type = entity.get("provider_type", provider_type)
+                _resolved_creds[name] = {
+                    "api_key": entity.get("api_key", ""),
+                    "base_url": entity.get("base_url", "") or "",
+                }
         await agent_registry.register(
             AgentMetadata(
                 name=a["name"],
@@ -236,7 +253,7 @@ async def create_runtime(
                 metadata_id=a["name"],
                 agent_type=a.get("agent_type", "simple"),
                 tool_names=scenario_tool_names.get(a["name"], []),
-                provider=a.get("provider", "openai"),
+                provider=provider_type,
                 model=a.get("model", ""),
                 llm_config=a.get("llm_config", {}),
                 compaction=_resolve_compaction_settings(a),
@@ -315,6 +332,12 @@ async def create_runtime(
                 "_extra_headers_provider": llm_extra_headers,
             }
             cfg.update(meta.llm_config)
+            creds = _resolved_creds.get(meta.name)
+            if creds:
+                if creds.get("api_key"):
+                    cfg["api_key"] = creds["api_key"]
+                if creds.get("base_url"):
+                    cfg["base_url"] = creds["base_url"]
             return llm_provider_registry.create(meta.provider, cfg)
 
         llm_provider_resolver = _resolver

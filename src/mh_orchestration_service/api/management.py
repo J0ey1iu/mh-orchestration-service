@@ -78,6 +78,7 @@ class AgentCreate(BaseModel):
     system_prompt: str = ""
     system_prompt_locale: str = ""
     provider: str = "openai"
+    provider_name: str = ""
     model: str = ""
     llm_config: dict[str, Any] = {}
     agent_type: str = "simple"
@@ -92,6 +93,7 @@ class AgentUpdate(BaseModel):
     system_prompt: str | None = None
     system_prompt_locale: str | None = None
     provider: str | None = None
+    provider_name: str | None = None
     model: str | None = None
     llm_config: dict[str, Any] | None = None
     agent_type: str | None = None
@@ -117,6 +119,23 @@ class ToolUpdate(BaseModel):
     parameters: dict[str, Any] | None = None
     endpoint_url: str | None = None
     source_code: str | None = None
+
+
+class ProviderCreate(BaseModel):
+    name: str
+    provider_type: str = "openai"
+    api_key: str = ""
+    base_url: str = ""
+    default_model: str = ""
+    description: str = ""
+
+
+class ProviderUpdate(BaseModel):
+    provider_type: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    default_model: str | None = None
+    description: str | None = None
 
 
 class AddScenarioAgentRequest(BaseModel):
@@ -471,6 +490,126 @@ async def list_providers(
     if registry is None:
         return []
     return registry.list_providers()
+
+
+# ── Provider Configs ──
+
+
+@router.get("/provider-configs")
+async def list_provider_configs(
+    request: Request,
+    q: str | None = Query(None, description="Search query"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(0, ge=0, description="Items per page (0 = all)"),
+    user_id: str = Depends(require_permission("manage:agent:*")),
+) -> ListResponse:
+    adapters = request.app.state.adapters
+    store = getattr(adapters, "provider_store", None)
+    if store is None:
+        return ListResponse(items=[], total=0, page=page, page_size=page_size)
+    items = await store.list_providers()
+    return ListResponse(
+        **_filter_and_page(
+            items,
+            q=q,
+            page=page,
+            page_size=page_size,
+            search_fields=["name", "provider_type", "description"],
+        )
+    )
+
+
+@router.get("/provider-configs/{name}")
+async def get_provider_config(
+    request: Request,
+    name: str,
+    user_id: str = Depends(require_permission("manage:agent:*")),
+) -> dict[str, Any]:
+    adapters = request.app.state.adapters
+    store = getattr(adapters, "provider_store", None)
+    if store is None:
+        raise HTTPException(501, "Provider store not configured")
+    p = await store.get_provider(name)
+    if p is None:
+        raise HTTPException(404, "Provider config not found")
+    return p
+
+
+@router.post("/provider-configs", status_code=201)
+async def create_provider_config(
+    request: Request,
+    body: ProviderCreate,
+    user_id: str = Depends(require_permission("manage:agent:*")),
+) -> dict[str, Any]:
+    adapters = request.app.state.adapters
+    store = getattr(adapters, "provider_store", None)
+    if store is None:
+        raise HTTPException(501, "Provider store not configured")
+    try:
+        payload = body.model_dump()
+        payload["created_by"] = user_id
+        result = await store.create_provider(payload)
+        logger.info("Provider config created name=%s by user=%s", body.name, user_id)
+        return result
+    except ValueError as e:
+        logger.warning(
+            "Create provider config conflict name=%s by user=%s: %s",
+            body.name,
+            user_id,
+            e,
+        )
+        raise HTTPException(409, str(e)) from None
+
+
+@router.put("/provider-configs/{name}")
+async def update_provider_config(
+    request: Request,
+    name: str,
+    body: ProviderUpdate,
+    user_id: str = Depends(require_permission("manage:agent:*")),
+) -> dict[str, Any]:
+    adapters = request.app.state.adapters
+    store = getattr(adapters, "provider_store", None)
+    if store is None:
+        raise HTTPException(501, "Provider store not configured")
+    payload = {k: v for k, v in body.model_dump().items() if v is not None}
+    payload["updated_by"] = user_id
+    try:
+        result = await store.update_provider(name, payload)
+        logger.info("Provider config updated name=%s by user=%s", name, user_id)
+        return result
+    except ValueError as e:
+        logger.warning(
+            "Update provider config not found name=%s by user=%s: %s",
+            name,
+            user_id,
+            e,
+        )
+        raise HTTPException(404, str(e)) from None
+
+
+@router.delete("/provider-configs/{name}")
+async def delete_provider_config(
+    request: Request,
+    name: str,
+    user_id: str = Depends(require_permission("manage:agent:*")),
+) -> dict[str, str]:
+    adapters = request.app.state.adapters
+    store = getattr(adapters, "provider_store", None)
+    if store is None:
+        raise HTTPException(501, "Provider store not configured")
+    try:
+        await store.delete_provider(name)
+        logger.info("Provider config deleted name=%s by user=%s", name, user_id)
+        return {"status": "deleted", "name": name}
+    except ValueError as e:
+        logger.warning(
+            "Delete provider config not found name=%s by user=%s: %s",
+            name,
+            user_id,
+            e,
+        )
+        raise HTTPException(404, str(e)) from None
 
 
 # ── Tools ──
