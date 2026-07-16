@@ -290,7 +290,7 @@ TAGS_METADATA = [
     },
     {
         "name": "runtime_tools",
-        "description": "运行时工具执行。Agent 运行时调用的内置工具，包括 `discover_agents`、`handoff`、`general_visualization` 等。",
+        "description": "运行时工具执行。Agent 运行时调用的内置工具，包括 `discover_agents`、`handoff` 等。",
     },
     {
         "name": "tool-generator",
@@ -327,10 +327,6 @@ TAGS_METADATA = [
     {
         "name": "component-sources",
         "description": "前端组件源配置（仅在 `dev_mode=true` 时可用）。返回 Tool UI 组件的 CDN/本地加载地址。",
-    },
-    {
-        "name": "runtime_tools_dev",
-        "description": "开发用运行时工具（仅在 `dev_mode=true` 时可用），包括 `calculator`、`show_ui_meta`、`stop_agent`。",
     },
     {
         "name": "guide",
@@ -527,12 +523,6 @@ def create_app(
     if settings.dev_mode:
         app.include_router(dev_router)
         app.include_router(component_sources_router)
-
-        from mh_orchestration_service.api.runtime_tools_dev import (
-            router as dev_runtime_tools_router,
-        )
-
-        app.include_router(dev_runtime_tools_router)
 
         static_dir = Path(__file__).resolve().parent / "static"
         if static_dir.is_dir():

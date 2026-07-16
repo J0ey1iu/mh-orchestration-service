@@ -140,7 +140,7 @@ class TestRegistryClient:
     @pytest.mark.asyncio
     async def test_list_tools(self):
         tools = await self.client.list_tools()
-        assert len(tools) == 7
+        assert len(tools) == 6
 
     @pytest.mark.asyncio
     async def test_custom_data(self):

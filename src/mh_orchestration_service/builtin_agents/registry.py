@@ -278,7 +278,7 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
             },
             "required": ["expression"],
         },
-        "endpoint_url": "/api/v1/tools/calculator/execute",
+        "endpoint_url": "http://localhost:8006/api/v1/tools/calculator/execute",
     },
     {
         "name": "web_search",
@@ -353,25 +353,7 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
                 }
             },
         },
-        "endpoint_url": "/api/v1/tools/show_ui_meta/execute",
-    },
-    {
-        "name": "general_visualization",
-        "display_name": "General Visualization",
-        "display_name_locale": '{"zh":"通用可视化","en":"General Visualization"}',
-        "description": "Display information in a visually optimized format",
-        "description_locale": '{"zh":"以更直观的视觉形式展示信息","en":"Display information in a visually optimized format"}',
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string",
-                    "description": "Description of the visualization to generate",
-                }
-            },
-            "required": ["description"],
-        },
-        "endpoint_url": "/api/v1/tools/general_visualization/execute",
+        "endpoint_url": "http://localhost:8006/api/v1/tools/show_ui_meta/execute",
     },
     {
         "name": "stop_agent",
@@ -387,8 +369,9 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
                     "description": "The final message to return to the user",
                 }
             },
+            "required": ["message"],
         },
-        "endpoint_url": "/api/v1/tools/stop_agent/execute",
+        "endpoint_url": "http://localhost:8006/api/v1/tools/stop_agent/execute",
     },
 ]
 
@@ -409,7 +392,6 @@ BUILTIN_SCENARIOS: list[dict[str, Any]] = [
                     "calculator",
                     "web_search",
                     "show_ui_meta",
-                    "general_visualization",
                     "stop_agent",
                 ],
             },
