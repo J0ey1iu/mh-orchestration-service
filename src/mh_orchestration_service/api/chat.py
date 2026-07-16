@@ -365,9 +365,14 @@ async def _stream_events(
                 list(payload.keys()),
             )
             yield _format_sse(event_type, payload)
-    except Exception:
+    except Exception as exc:
         logger.exception("Chat stream error")
-        yield _format_sse("Error", {"message": "An internal error occurred."})
+        # Surface a useful hint to the caller without leaking internals.
+        detail = str(exc) or type(exc).__name__
+        yield _format_sse(
+            "Error",
+            {"message": f"{type(exc).__name__}: {detail}"},
+        )
     finally:
         if stop_event is not None:
             stop_event.set()

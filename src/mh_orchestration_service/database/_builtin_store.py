@@ -220,7 +220,11 @@ class BuiltinSessionStore:
 
         base_order = memory.get_persisted_count()
 
-        await self._db.begin()
+        # Use a savepoint so this is safe even if the connection already has
+        # an implicit/explicit transaction open (e.g. from tool execution
+        # during streaming). SAVEPOINTs nest cleanly; BEGIN IMMEDIATE does not.
+        savepoint = f"sp_save_{session_id[:8]}_{trace_id[:8]}"
+        await self._db.execute(f"SAVEPOINT {savepoint}", [])
         try:
             if new_msgs:
                 rows = []
@@ -262,9 +266,9 @@ class BuiltinSessionStore:
                     [audit_id, now, trace_id, session_id],
                 )
 
-            await self._db.commit()
+            await self._db.execute(f"RELEASE SAVEPOINT {savepoint}", [])
         except Exception:
-            await self._db.rollback()
+            await self._db.execute(f"ROLLBACK TO SAVEPOINT {savepoint}", [])
             raise
 
         if new_msgs:
