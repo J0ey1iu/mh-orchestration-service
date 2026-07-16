@@ -33,9 +33,9 @@ class M2MAuthProvider(Protocol):
         ...
 
     async def get_identity_headers(self, request: Any, identity: str) -> dict[str, str]:
-        """返回注入到出站 binding（RemoteAgentBinding / RemoteToolBinding）的身份 header。
+        """返回注入到出站 RemoteToolBinding 的身份 header。
 
-        当 chat 流程或 agent 调用下游 remote agent / tool 时，此方法返回的 header
+        当 chat 流程调用下游 remote tool 时，此方法返回的 header
         会被写入 HTTP 请求，让下游 M2M 鉴权端点识别调用方身份。
 
         Args:

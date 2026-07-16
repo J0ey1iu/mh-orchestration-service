@@ -179,7 +179,6 @@ async def run_batch_eval(
                             provider=batch_request.llm_provider,
                             model=batch_request.llm_model,
                             llm_config=existing.llm_config,
-                            binding=existing.binding,
                         )
                         await agent_registry.register(overridden)
                     else:
