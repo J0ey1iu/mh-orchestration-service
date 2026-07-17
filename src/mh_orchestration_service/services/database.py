@@ -3,11 +3,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable
 
-from mh_orchestration_service.database import (
-    BuiltinSessionStore,
-    DatabaseProtocol,
-    SqliteDatabase,
-)
+from mh_orchestration_service.database._protocol import DatabaseProtocol
 from mh_orchestration_service.database._memory_store import SessionStoreProtocol
 
 _db: DatabaseProtocol | None = None
@@ -47,13 +43,7 @@ async def get_session_store() -> SessionStoreProtocol:
         if inspect.isawaitable(result):
             return await result
         return result
-    return BuiltinSessionStore(get_db())
-
-
-async def init_db(dsn: str, auto_schema: bool = True) -> None:
-    d = SqliteDatabase()
-    set_db(d)
-    await d.init(dsn)
-    if auto_schema:
-        store = BuiltinSessionStore(d)
-        await store.init_schema()
+    raise RuntimeError(
+        "No session store factory configured. "
+        "Call set_session_store_factory() during app startup."
+    )

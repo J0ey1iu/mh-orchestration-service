@@ -10,20 +10,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from mh_service_kit.logging_setup import setup_service_logging
-from minimal_harness.llm.factory import register_builtin_providers
-from minimal_harness.llm.llm import LLMProvider, ProviderFactory
 from minimal_harness.types import ExtraHeadersProvider
 from starlette.responses import FileResponse
 
-from mh_orchestration_service.adapters import (
-    MetadataManager,
-    ProviderStore,
-    RegistryProvider,
-)
 from mh_orchestration_service.api.auth_routes import dev_router
 from mh_orchestration_service.api.component_sources import component_sources_router
 from mh_orchestration_service.api.router import router
-from mh_orchestration_service.auth import PermissionChecker, UserAuthProvider
 from mh_orchestration_service.config import ConfigSchema
 from mh_orchestration_service.context import (
     clear_current_user_id,
@@ -33,31 +25,7 @@ from mh_orchestration_service.context import (
     set_current_request,
     set_current_trace_id,
 )
-from mh_orchestration_service.eval.storage import (
-    EvalResultStorage,
-    LocalFileEvalStorage,
-)
 from mh_orchestration_service.monitoring.middleware import AccessLogMiddleware
-from mh_orchestration_service.services.auth_client import _DefaultAuthProvider
-from mh_orchestration_service.services.generated_agent_provider import (
-    AgentGenerator,
-    DefaultAgentGenerator,
-)
-from mh_orchestration_service.services.generated_tool_provider import (
-    DefaultToolGenerator,
-    ToolGenerator,
-)
-from mh_orchestration_service.services.m2m_auth import (
-    M2MAuthProvider,
-    _DefaultM2MAuthProvider,
-)
-from mh_orchestration_service.services.management_provider import (
-    InMemoryManagementProvider,
-)
-from mh_orchestration_service.services.outbound_auth import (
-    OutboundAuthProvider,
-    _DefaultOutboundAuthProvider,
-)
 
 logger = logging.getLogger("orchestration.app")
 
@@ -83,26 +51,26 @@ class AppState:
     def __init__(
         self,
         settings: ConfigSchema,
-        token_verifier: UserAuthProvider | None = None,
-        permission_checker: PermissionChecker | None = None,
-        registry_provider: RegistryProvider | None = None,
-        management_provider: MetadataManager | None = None,
-        llm_provider_factory: Callable[[], LLMProvider] | None = None,
-        outbound_auth_provider: OutboundAuthProvider | None = None,
-        m2m_auth_provider: M2MAuthProvider | None = None,
-        llm_extra_headers_provider: ExtraHeadersProvider | None = None,
-        generated_tool_provider: ToolGenerator | None = None,
-        generated_agent_provider: AgentGenerator | None = None,
-        llm_provider_registry: ProviderFactory | None = None,
-        provider_store: ProviderStore | None = None,
+        token_verifier: Any | None = None,
+        permission_checker: Any | None = None,
+        registry_provider: Any | None = None,
+        management_provider: Any | None = None,
+        llm_provider_factory: Any | None = None,
+        outbound_auth_provider: Any | None = None,
+        m2m_auth_provider: Any | None = None,
+        llm_extra_headers_provider: Any | None = None,
+        generated_tool_provider: Any | None = None,
+        generated_agent_provider: Any | None = None,
+        llm_provider_registry: Any | None = None,
+        provider_store: Any | None = None,
     ) -> None:
         object.__setattr__(self, "_initialized", False)
         self.settings = settings
         self.token_verifier = token_verifier
         self.permission_checker = permission_checker
         self.registry_provider = registry_provider
-        self.management_provider: MetadataManager | None = management_provider
-        self.provider_store: ProviderStore | None = provider_store
+        self.management_provider = management_provider
+        self.provider_store = provider_store
         self.llm_provider_factory = llm_provider_factory
         self.outbound_auth_provider = outbound_auth_provider
         self.m2m_auth_provider = m2m_auth_provider
@@ -110,7 +78,7 @@ class AppState:
         self.generated_tool_provider = generated_tool_provider
         self.generated_agent_provider = generated_agent_provider
         self.llm_provider_registry = llm_provider_registry
-        self.eval_result_storage: EvalResultStorage | None = None
+        self.eval_result_storage = None
         object.__setattr__(self, "_initialized", True)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -124,91 +92,6 @@ class AppState:
                 stacklevel=2,
             )
         object.__setattr__(self, name, value)
-
-
-def _fill_default_adapters(state: AppState) -> None:
-    """Fill any None adapters with built-in defaults."""
-    if state.token_verifier is None and state.permission_checker is None:
-        auth = _DefaultAuthProvider()
-        state.token_verifier = auth
-        state.permission_checker = auth
-    else:
-        if state.token_verifier is None:
-            state.token_verifier = _DefaultAuthProvider()
-        if state.permission_checker is None:
-            state.permission_checker = _DefaultAuthProvider()
-    if state.management_provider is None:
-        if state.registry_provider is None:
-            state.management_provider = InMemoryManagementProvider(
-                enable_builtin=state.settings.dev_mode,
-            )
-            object.__setattr__(state, "registry_provider", state.management_provider)
-        elif isinstance(state.registry_provider, MetadataManager):
-            state.management_provider = state.registry_provider
-        else:
-            state.management_provider = state.registry_provider  # type: ignore[assignment]
-            logger.warning(
-                "registry_provider is not a MetadataManager; "
-                "management CRUD APIs will not be available"
-            )
-    if state.provider_store is None:
-        from mh_orchestration_service.services.provider_store import (
-            InMemoryProviderStore,
-        )
-
-        state.provider_store = InMemoryProviderStore(
-            enable_builtin=state.settings.dev_mode,
-        )
-    if state.outbound_auth_provider is None:
-        state.outbound_auth_provider = _DefaultOutboundAuthProvider()
-    if state.m2m_auth_provider is None:
-        state.m2m_auth_provider = _DefaultM2MAuthProvider()
-
-    if state.llm_provider_registry is None:
-        factory = ProviderFactory()
-        register_builtin_providers(factory)
-        state.llm_provider_registry = factory
-
-    if state.llm_provider_factory is None:
-        _registry = state.llm_provider_registry
-
-        def _default_llm_factory() -> LLMProvider:
-            return _registry.create("openai", {})
-
-        state.llm_provider_factory = _default_llm_factory
-
-    # Must come after llm_provider_factory default (above).
-    if state.generated_tool_provider is None:
-        state.generated_tool_provider = DefaultToolGenerator()
-        state.generated_tool_provider.set_llm_factory(state.llm_provider_factory)
-
-    if state.generated_agent_provider is None:
-        state.generated_agent_provider = DefaultAgentGenerator()
-        state.generated_agent_provider.set_llm_factory(state.llm_provider_factory)
-
-    if state.eval_result_storage is None:
-        state.eval_result_storage = LocalFileEvalStorage(
-            base_dir=state.settings.eval_results_dir,
-        )
-
-
-async def _close_adapters(state: AppState) -> None:
-    """Close built-in adapters that were created by ``_fill_default_adapters``."""
-    if isinstance(state.token_verifier, _DefaultAuthProvider):
-        await state.token_verifier.close()
-    if (
-        isinstance(state.permission_checker, _DefaultAuthProvider)
-        and state.permission_checker is not state.token_verifier
-    ):
-        await state.permission_checker.close()
-    if isinstance(state.outbound_auth_provider, _DefaultOutboundAuthProvider):
-        await state.outbound_auth_provider.close()
-    if isinstance(state.m2m_auth_provider, _DefaultM2MAuthProvider):
-        await state.m2m_auth_provider.close()
-    if isinstance(state.management_provider, InMemoryManagementProvider):
-        await state.management_provider.close()
-    if isinstance(state.provider_store, ProviderStore):
-        await state.provider_store.close()
 
 
 _KNOWN_ADAPTER_SLOTS: frozenset[str] = frozenset(
@@ -400,13 +283,10 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        from mh_orchestration_service.services.database import get_db, init_db
-
         state = AppState(
             settings=settings,
             llm_extra_headers_provider=llm_extra_headers_provider,
         )
-        _fill_default_adapters(state)
         app.state.adapters = state
 
         if settings.metrics_enabled:
@@ -454,10 +334,6 @@ def create_app(
 
             _warn_unknown_adapter_slots(state)
 
-            await init_db(
-                settings.database_url,
-                auto_schema=settings.db_auto_schema,
-            )
             yield
 
         if settings.metrics_enabled:
@@ -470,9 +346,6 @@ def create_app(
             if collector:
                 await collector.stop_push()
                 set_collector(None)
-
-        await _close_adapters(state)
-        await get_db().close()
 
     app = FastAPI(
         title="Orchestration Service",

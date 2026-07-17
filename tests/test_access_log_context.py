@@ -76,15 +76,18 @@ class TestAccessLogContext:
         @asynccontextmanager
         async def hook(app: FastAPI):
             adapters = app.state.adapters
+            adapters.token_verifier = AsyncMock()
+            adapters.token_verifier.verify = AsyncMock(
+                return_value=UserIdentity(user_id="u-42", username="test-user")
+            )
+            adapters.permission_checker = AsyncMock()
             adapters.permission_checker.get_permissions = AsyncMock(
                 return_value=ALL_PERMS
             )
             adapters.permission_checker.check = AsyncMock(
                 side_effect=lambda uid, perm: True
             )
-            adapters.token_verifier.verify = AsyncMock(
-                return_value=UserIdentity(user_id="u-42", username="test-user")
-            )
+            adapters.management_provider = AsyncMock()
             adapters.management_provider.list_scenarios = AsyncMock(
                 return_value=TEST_SCENARIOS
             )

@@ -17,24 +17,10 @@ from mh_orchestration_service.context import (
     get_current_trace_id,
     get_current_user_id,
 )
-from mh_orchestration_service.services.auth_client import _DefaultAuthProvider
 from mh_orchestration_service.services.generated_agent_provider import AgentGenerator
 from mh_orchestration_service.services.generated_tool_provider import ToolGenerator
-from mh_orchestration_service.services.m2m_auth import (
-    M2MAuthProvider,
-    _DefaultM2MAuthProvider,
-)
-from mh_orchestration_service.services.management_provider import (
-    InMemoryManagementProvider,
-)
-from mh_orchestration_service.services.outbound_auth import (
-    OutboundAuthProvider,
-    _DefaultOutboundAuthProvider,
-)
-
-DefaultAuthProvider = _DefaultAuthProvider
-DefaultM2MAuthProvider = _DefaultM2MAuthProvider
-DefaultOutboundAuthProvider = _DefaultOutboundAuthProvider
+from mh_orchestration_service.services.m2m_auth import M2MAuthProvider
+from mh_orchestration_service.services.outbound_auth import OutboundAuthProvider
 
 __all__ = (
     "AgentGenerator",
@@ -43,10 +29,6 @@ __all__ = (
     "ConfigManager",
     "ConfigProvider",
     "ConfigSchema",
-    "DefaultAuthProvider",
-    "DefaultM2MAuthProvider",
-    "DefaultOutboundAuthProvider",
-    "InMemoryManagementProvider",
     "LifespanHook",
     "M2MAuthProvider",
     "MetadataManager",
@@ -57,8 +39,6 @@ __all__ = (
     "ToolGenerator",
     "UserAuthProvider",
     "UserIdentity",
-    "_DefaultM2MAuthProvider",
-    "_DefaultOutboundAuthProvider",
     "create_app",
     "get_current_auth_token",
     "get_current_cookies",

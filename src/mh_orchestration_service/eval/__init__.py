@@ -1,8 +1,5 @@
 from mh_orchestration_service.eval.api import router
-from mh_orchestration_service.eval.storage import (
-    EvalResultStorage,
-    LocalFileEvalStorage,
-)
+from mh_orchestration_service.eval.storage import EvalResultStorage
 from mh_orchestration_service.eval.types import (
     BatchEvalRequest,
     BatchSummary,
@@ -17,7 +14,6 @@ __all__ = (
     "EvalQuestion",
     "EvalResultStorage",
     "LLMCallRecord",
-    "LocalFileEvalStorage",
     "QuestionResult",
     "router",
 )

@@ -9,10 +9,6 @@ from mh_orchestration_service import (
     ConfigManager,
     ConfigProvider,
     ConfigSchema,
-    DefaultAuthProvider,
-    DefaultM2MAuthProvider,
-    DefaultOutboundAuthProvider,
-    InMemoryManagementProvider,
     MetadataManager,
     OutboundAuthProvider,
     PermissionChecker,
@@ -48,19 +44,6 @@ def test_top_level_exports_available():
     assert OutboundAuthProvider is not None
     assert ToolGenerator is not None
     assert AgentGenerator is not None
-    assert InMemoryManagementProvider is not None
-
-
-def test_default_aliases_match_underscore_versions():
-    from mh_orchestration_service.services.auth_client import _DefaultAuthProvider
-    from mh_orchestration_service.services.m2m_auth import _DefaultM2MAuthProvider
-    from mh_orchestration_service.services.outbound_auth import (
-        _DefaultOutboundAuthProvider,
-    )
-
-    assert DefaultAuthProvider is _DefaultAuthProvider
-    assert DefaultM2MAuthProvider is _DefaultM2MAuthProvider
-    assert DefaultOutboundAuthProvider is _DefaultOutboundAuthProvider
 
 
 def test_create_app_is_callable():
