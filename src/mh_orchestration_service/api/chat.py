@@ -1,30 +1,12 @@
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from minimal_harness.tool.registry import ToolRegistry
-from minimal_harness.types import (
-    AgentEnd,
-    AgentStart,
-    CompactionChunk,
-    CompactionEnd,
-    CompactionStart,
-    ExecutionEnd,
-    ExecutionStart,
-    LLMChunk,
-    LLMEnd,
-    LLMStart,
-    MemoryUpdate,
-    MessageEvent,
-    ToolEnd,
-    ToolProgress,
-    ToolResult,
-    ToolStart,
-)
+from minimal_harness.types import MessageEvent, ToolStart
 from pydantic import BaseModel
 
 from mh_orchestration_service.api.dependencies import (
@@ -39,7 +21,9 @@ from mh_orchestration_service.services.database import get_session_store
 from mh_orchestration_service.services.runtime_service import (
     acquire_session_lock,
     create_runtime,
+    format_sse,
     release_session_lock,
+    serialize_harness_event,
 )
 
 logger = logging.getLogger("orchestration.chat")
@@ -60,151 +44,6 @@ async def _resolve_tool_display_name(
     if tool_meta:
         return tool_meta.resolve_display_name(locale)
     return func_name
-
-
-def _compute_llm_start_info(event: LLMStart) -> dict[str, Any]:
-    total_chars = 0
-    for msg in event.messages:
-        role = msg.get("role", "")
-        if role == "system":
-            total_chars += len(msg.get("content", "") or "")
-        elif role == "user":
-            parts = msg.get("content", [])
-            if isinstance(parts, list):
-                for part in parts:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        total_chars += len(part.get("text", "") or "")
-        elif role == "assistant":
-            total_chars += len(msg.get("content", "") or "")
-            tool_calls = msg.get("tool_calls")
-            if tool_calls:
-                total_chars += len(json.dumps(tool_calls, ensure_ascii=False))
-        elif role == "tool":
-            total_chars += len(msg.get("content", "") or "")
-        elif role == "reasoning":
-            total_chars += len(msg.get("content", "") or "")
-    return {
-        "tool_names": [
-            t.get("function", {}).get("name")
-            if isinstance(t, dict)
-            else getattr(t, "name", str(t))
-            for t in event.tools
-        ],
-        "message_count": len(event.messages),
-        "total_chars": total_chars,
-    }
-
-
-def _serialize_event(event: Any) -> dict[str, Any]:
-    match event:
-        case AgentStart():
-            return {}
-        case AgentEnd():
-            return {
-                "response": event.response,
-                "time_taken": event.time_taken,
-                "exceeded": event.exceeded,
-                "interrupted": event.interrupted,
-                "error": event.error,
-            }
-        case LLMStart():
-            return _compute_llm_start_info(event)
-        case LLMChunk():
-            if event.chunk:
-                return {
-                    "content": event.chunk.content,
-                    "reasoning": event.chunk.reasoning,
-                    "tool_calls": event.chunk.tool_calls,
-                }
-            return {}
-        case LLMEnd():
-            return {
-                "content": event.content,
-                "reasoning_content": event.reasoning_content,
-                "tool_calls": event.tool_calls,
-                "usage": event.usage,
-                "error": event.error,
-            }
-        case ExecutionStart():
-            return {"tool_calls": event.tool_calls}
-        case ExecutionEnd():
-            return {
-                "results": event.results,
-                "error": event.error,
-                "should_stop": event.should_stop,
-                "response_text": event.response_text,
-            }
-        case ToolStart():
-            return {
-                "tool_call": event.tool_call,
-                "display_name": (
-                    event.tool_call.get("function", {}).get("name", "")
-                    if isinstance(event.tool_call, dict)
-                    else ""
-                ),
-            }
-        case ToolProgress():
-            return {
-                "tool_call": event.tool_call,
-                "chunk": _serialize_chunk(event.chunk),
-            }
-        case ToolEnd():
-            if isinstance(event.result, ToolResult):
-                return {
-                    "tool_call": event.tool_call,
-                    "result": _serialize_result(event.result.content),
-                    "meta": event.result.meta,
-                    "stop": event.result.stop,
-                }
-            return {
-                "tool_call": event.tool_call,
-                "result": _serialize_result(event.result),
-            }
-        case MemoryUpdate():
-            return {"usage": event.usage}
-        case CompactionStart():
-            return {
-                "dropped_message_count": event.dropped_message_count,
-                "existing_summary": event.existing_summary,
-                "keep_recent": event.keep_recent,
-                "total_tokens": event.total_tokens,
-            }
-        case CompactionChunk():
-            return {
-                "delta": event.delta,
-                "accumulated": event.accumulated,
-            }
-        case CompactionEnd():
-            return {
-                "summary": event.summary,
-                "dropped_message_count": event.dropped_message_count,
-                "new_offset": event.new_offset,
-                "duration": event.duration,
-                "error": event.error,
-            }
-    return {}
-
-
-def _serialize_chunk(chunk: Any) -> Any:
-    if isinstance(chunk, dict):
-        return {k: v for k, v in chunk.items() if not k.startswith("_")}
-    return str(chunk)
-
-
-def _serialize_result(result: Any) -> Any:
-    if isinstance(result, dict):
-        return {k: v for k, v in result.items() if not k.startswith("_")}
-    if isinstance(result, Exception):
-        return f"[Error] {result}"
-    if not isinstance(result, str):
-        return str(result)
-    return result
-
-
-def _format_sse(event: str, data: dict[str, Any]) -> str:
-    return (
-        f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
-    )
 
 
 async def _get_scenario_for_session(
@@ -348,7 +187,7 @@ async def _stream_events(
                 continue
 
             event_type = type(event).__name__
-            payload = _serialize_event(event)
+            payload = serialize_harness_event(event)
             if isinstance(event, ToolStart) and locale and tool_registry:
                 func_name = (
                     event.tool_call.get("function", {}).get("name", "")
@@ -364,12 +203,11 @@ async def _stream_events(
                 memory_id,
                 list(payload.keys()),
             )
-            yield _format_sse(event_type, payload)
+            yield format_sse(event_type, payload)
     except Exception as exc:
         logger.exception("Chat stream error")
-        # Surface a useful hint to the caller without leaking internals.
         detail = str(exc) or type(exc).__name__
-        yield _format_sse(
+        yield format_sse(
             "Error",
             {"message": f"{type(exc).__name__}: {detail}"},
         )
@@ -388,4 +226,4 @@ async def _stream_events(
         except Exception:
             logger.exception("Failed to persist session messages")
 
-    yield _format_sse("done", {})
+    yield format_sse("done", {})
