@@ -59,8 +59,6 @@ class AppState:
         outbound_auth_provider: Any | None = None,
         m2m_auth_provider: Any | None = None,
         llm_extra_headers_provider: Any | None = None,
-        generated_tool_provider: Any | None = None,
-        generated_agent_provider: Any | None = None,
         llm_provider_registry: Any | None = None,
         provider_store: Any | None = None,
     ) -> None:
@@ -75,8 +73,6 @@ class AppState:
         self.outbound_auth_provider = outbound_auth_provider
         self.m2m_auth_provider = m2m_auth_provider
         self.llm_extra_headers_provider = llm_extra_headers_provider
-        self.generated_tool_provider = generated_tool_provider
-        self.generated_agent_provider = generated_agent_provider
         self.llm_provider_registry = llm_provider_registry
         self.eval_result_storage = None
         object.__setattr__(self, "_initialized", True)
@@ -106,8 +102,6 @@ _KNOWN_ADAPTER_SLOTS: frozenset[str] = frozenset(
         "outbound_auth_provider",
         "m2m_auth_provider",
         "llm_extra_headers_provider",
-        "generated_tool_provider",
-        "generated_agent_provider",
         "llm_provider_registry",
         "eval_result_storage",
         "_initialized",
@@ -235,8 +229,6 @@ def create_app(
     outbound_auth_provider: LifespanHook | None = None,
     m2m_auth_provider: LifespanHook | None = None,
     llm_extra_headers_provider: ExtraHeadersProvider | None = None,
-    generated_tool_provider: LifespanHook | None = None,
-    generated_agent_provider: LifespanHook | None = None,
     llm_provider_registry: LifespanHook | None = None,
     provider_store: LifespanHook | None = None,
     eval_result_storage: LifespanHook | None = None,
@@ -318,11 +310,6 @@ def create_app(
                 await stack.enter_async_context(outbound_auth_provider(app))
             if m2m_auth_provider is not None:
                 await stack.enter_async_context(m2m_auth_provider(app))
-            if generated_tool_provider is not None:
-                await stack.enter_async_context(generated_tool_provider(app))
-            if generated_agent_provider is not None:
-                await stack.enter_async_context(generated_agent_provider(app))
-
             if provider_store is not None:
                 await stack.enter_async_context(provider_store(app))
 

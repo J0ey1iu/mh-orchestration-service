@@ -6,11 +6,6 @@ from typing import Any, AsyncIterator
 from mh_orchestration_service.context import get_current_request, get_current_user_id
 
 
-async def _web_search_fn(query: str = "") -> AsyncIterator[Any]:
-    await asyncio.sleep(0.05)
-    yield f'[Simulated] Search results for "{query}": Found 42 relevant pages. Top result: example.com/{query.replace(" ", "-")}'
-
-
 async def _discover_agents_fn(
     exclude: str = "", locale: str = ""
 ) -> AsyncIterator[Any]:
@@ -185,8 +180,7 @@ Available specialist agents:
 - code-reviewer — Analyzes code changes for bugs, style issues, security vulnerabilities, and performance problems
 - writer — Helps craft clear, engaging, and well-structured content including articles, emails, reports, and creative writing
 
-When a user's request matches a specialist's expertise, use the handoff tool to transfer the conversation to them.
-For general knowledge questions or information lookup, use the web_search tool to find answers online."""
+When a user's request matches a specialist's expertise, use the handoff tool to transfer the conversation to them."""
 
 TRIAGE_SYSTEM_PROMPT_ZH = """你是一个通用助手，帮助用户处理各种任务。理解用户的需求，直接处理或将其路由到合适的专业智能体。
 
@@ -194,8 +188,7 @@ TRIAGE_SYSTEM_PROMPT_ZH = """你是一个通用助手，帮助用户处理各种
 - code-reviewer — 分析代码变更中的缺陷、风格问题、安全漏洞和性能问题
 - writer — 帮助撰写清晰、有吸引力且结构良好的内容，包括文章、邮件、报告和创意写作
 
-当用户的需求符合某个专业智能体的专长时，使用 handoff 工具将对话移交给该智能体。
-对于一般的知识问答或信息查询，使用 web_search 工具在线搜索答案。"""
+当用户的需求符合某个专业智能体的专长时，使用 handoff 工具将对话移交给该智能体。"""
 
 CODE_REVIEW_SYSTEM_PROMPT = """You are a senior code reviewer. Analyze code changes for bugs, style issues, security vulnerabilities, and performance problems. Provide constructive, specific feedback with concrete fix suggestions. Be thorough but concise.
 When the user's request is outside your expertise, use handoff to transfer to another agent. Use discover_agents to find available agents first."""

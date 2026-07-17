@@ -4,7 +4,6 @@ import warnings
 import pytest
 
 from mh_orchestration_service import (
-    AgentGenerator,
     AppState,
     ConfigManager,
     ConfigProvider,
@@ -14,7 +13,6 @@ from mh_orchestration_service import (
     PermissionChecker,
     RegistryProvider,
     SecretResolver,
-    ToolGenerator,
     UserAuthProvider,
     UserIdentity,
     create_app,
@@ -42,8 +40,6 @@ def test_top_level_exports_available():
     assert UserIdentity is not None
     assert callable(match_permission)
     assert OutboundAuthProvider is not None
-    assert ToolGenerator is not None
-    assert AgentGenerator is not None
 
 
 def test_create_app_is_callable():

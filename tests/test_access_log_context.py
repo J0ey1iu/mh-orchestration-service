@@ -29,7 +29,7 @@ TEST_SCENARIOS = [
         "icon": "\U0001f4dd",
         "description": "Help with writing",
         "description_locale": "{}",
-        "agents": [{"name": "writer", "tool_names": ["web_search"]}],
+        "agents": [{"name": "writer", "tool_names": []}],
     },
 ]
 

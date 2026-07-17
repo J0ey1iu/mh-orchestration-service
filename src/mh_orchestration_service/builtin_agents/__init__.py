@@ -1,5 +1,4 @@
 from mh_orchestration_service.builtin_agents.registry import (
-    _web_search_fn,
     _discover_agents_fn,
     _handoff_fn,
     TRIAGE_SYSTEM_PROMPT,
@@ -11,7 +10,6 @@ from mh_orchestration_service.builtin_agents.registry import (
 )
 
 __all__ = (
-    "_web_search_fn",
     "_discover_agents_fn",
     "_handoff_fn",
     "TRIAGE_SYSTEM_PROMPT",

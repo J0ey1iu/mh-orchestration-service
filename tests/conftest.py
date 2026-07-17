@@ -34,7 +34,7 @@ TEST_SCENARIOS = [
         "agents": [
             {
                 "name": "writer",
-                "tool_names": ["web_search"],
+                "tool_names": [],
             }
         ],
     },
