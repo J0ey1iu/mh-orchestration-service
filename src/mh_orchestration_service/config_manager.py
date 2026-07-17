@@ -127,9 +127,7 @@ class ConfigManager:
 
         for field_name in schema_cls.model_fields:
             field_info = schema_cls.model_fields[field_name]
-            has_default = (
-                field_info.default is not None or field_info.default_factory is not None
-            )
+            has_default = not field_info.is_required()
 
             # ── 1. 环境变量 ──────────────────────────
             env_key = _env_key(prefix, field_name)
