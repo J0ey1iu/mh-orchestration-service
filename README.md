@@ -157,13 +157,7 @@ agents = await adapters.management_provider.list_agents()
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/v1/tool-generator/generate` | POST | SSE 流式工具生成 |
-| `/api/v1/tool-generator/tools[/{name}]` | GET/POST/PUT/DELETE | 用户已生成工具 CRUD |
-| `/api/v1/tool-generator/tools/{name}/trial` | POST | 工具试运行（SSE） |
-| `/api/v1/tools/generated/{name}/execute` | POST | M2M 鉴权的生成工具执行 |
-| `/api/v1/agent-generator/generate` | POST | SSE 流式 Agent 生成 |
-| `/api/v1/agent-generator/agents[/{name}]` | GET/POST/PUT/DELETE | 用户已生成 Agent CRUD |
-| `/api/v1/agent-generator/agents/{name}/trial` | POST | Agent 试运行（SSE 流式聊天） |
+
 
 ### 开发模式端点（仅 `dev_mode=true`）
 
@@ -316,7 +310,7 @@ class VaultSecretResolver(ConfigProvider):
 | `code-reviewer` | Code Reviewer | 代码审查 | 分析代码变更中的缺陷、风格、安全和性能问题。通过 M2M 端点执行。 |
 | `writer` | Writing Assistant | 写作助手 | 辅助撰写文章、邮件、报告等。通过 M2M 端点执行。 |
 
-内置 Tool 包括 `web_search`、`calculator`、`handoff`、`discover_agents`、`show_ui_meta`、`general_visualization`、`stop_agent`。
+内置 Tool 包括 `calculator`、`handoff`、`discover_agents`、`show_ui_meta`、`general_visualization`、`stop_agent`。
 
 `triage` agent 在进程内本地执行（无 `endpoint_url`），`code-reviewer` 和 `writer` 通过 M2M 端点执行。内置 agent 的 system_prompt 支持中英文，根据前端传来的 `Accept-Language` 自动适配。
 

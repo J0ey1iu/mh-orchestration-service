@@ -46,7 +46,7 @@ uvicorn mh_orchestration_service.main:app --port 8005
 |----------|------|------|
 | `1` | admin | `use:*:*`、`manage:*:*` |
 | `2` | member | `use:agent:triage`、`use:tool:calculator`、`use:scene:triage`、`manage:scene:*` |
-| `3` | user | `use:agent:code-reviewer`、`use:agent:writer`、`use:tool:web_search`、`use:scene:code_review`、`use:scene:writing` |
+| `3` | user | `use:agent:code-reviewer`、`use:agent:writer`、`use:scene:code_review`、`use:scene:writing` |
 | `4` | scene-manager | `manage:scene:*` |
 | `5` | agent-manager | `manage:agent:*` |
 | `6` | tool-manager | `manage:tool:*` |
@@ -55,7 +55,7 @@ uvicorn mh_orchestration_service.main:app --port 8005
 
 内置的默认数据（`ORCH_DEV_MODE=true` 时可用）：
 - **Agent**: `triage`、`code-reviewer`、`writer`
-- **Tool**: `calculator`、`web_search`、`handoff`、`discover_agents`、`show_ui_meta`、`general_visualization`、`stop_agent`
+- **Tool**: `calculator`、`handoff`、`discover_agents`、`show_ui_meta`、`general_visualization`、`stop_agent`
 - **Scenario**: `triage`、`code_review`、`writing`
 
 ### 内置 Agent 开关
