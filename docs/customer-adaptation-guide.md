@@ -51,7 +51,7 @@ uvicorn mh_orchestration_service.main:app --port 8005
 | `5` | agent-manager | `manage:agent:*` |
 | `6` | tool-manager | `manage:tool:*` |
 
-> 开发模式下可通过 `GET /api/v1/dev/login` 访问 Mock SSO 登录页快速切换用户身份。
+> 开发模式下可通过 `GET /api/v1/dev/login` 访问 Mock SSO 登录页快速切换用户身份（由 `mh-orch-app` 提供）。
 
 内置的默认数据（`ORCH_DEV_MODE=true` 时可用）：
 - **Agent**: `triage`、`code-reviewer`、`writer`

@@ -163,7 +163,6 @@ agents = await adapters.management_provider.list_agents()
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/v1/dev/login` | GET/POST | 开发用 Mock SSO 登录页 |
 
 ## AuditMiddleware
 

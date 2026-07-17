@@ -6,14 +6,13 @@ from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontext
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from mh_service_kit.logging_setup import setup_service_logging
 from minimal_harness.types import ExtraHeadersProvider
 from starlette.responses import FileResponse
 
-from mh_orchestration_service.api.auth_routes import dev_router
 from mh_orchestration_service.api.component_sources import component_sources_router
 from mh_orchestration_service.api.router import router
 from mh_orchestration_service.config import ConfigSchema
@@ -130,7 +129,7 @@ def _warn_unknown_adapter_slots(state: AppState) -> None:
 TAGS_METADATA = [
     {
         "name": "auth",
-        "description": "用户认证与身份信息。获取当前用户信息（含权限列表），以及开发模式下的 Mock SSO 登录/登出。",
+        "description": "用户认证与身份信息。获取当前用户信息（含权限列表）及登出。",
     },
     {
         "name": "scenarios",
@@ -185,10 +184,6 @@ TAGS_METADATA = [
         "description": "评测管理。批量运行评测任务（通过 M2M 鉴权），用于评估 Agent 在测试问题集上的表现。",
     },
     {
-        "name": "dev",
-        "description": "开发调试工具（仅在 `dev_mode=true` 时可用）。Mock SSO 登录页、内置组件资源等。",
-    },
-    {
         "name": "component-sources",
         "description": "前端组件源配置（仅在 `dev_mode=true` 时可用）。返回 Tool UI 组件的 CDN/本地加载地址。",
     },
@@ -233,6 +228,7 @@ def create_app(
     provider_store: LifespanHook | None = None,
     eval_result_storage: LifespanHook | None = None,
     lifespan_hooks: list[LifespanHook] | None = None,
+    dev_routers: list[APIRouter] | None = None,
 ) -> FastAPI:
     """Create a configured FastAPI app for the orchestration service.
 
@@ -372,8 +368,11 @@ def create_app(
         app.include_router(eval_router)
 
     if settings.dev_mode:
-        app.include_router(dev_router)
         app.include_router(component_sources_router)
+
+        if dev_routers:
+            for r in dev_routers:
+                app.include_router(r)
 
         static_dir = Path(__file__).resolve().parent / "static"
         if static_dir.is_dir():
