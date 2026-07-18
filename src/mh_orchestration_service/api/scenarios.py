@@ -34,7 +34,7 @@ async def _enrich_agents_for_scenario(
     locale: str,
 ) -> list[dict]:
     adapters = request.app.state.adapters
-    scenario_agents = {a["name"] for a in scenario.get("agents", [])}
+    scenario_agents = list(dict.fromkeys(a["name"] for a in scenario.get("agents", [])))
     scenario_tools: dict[str, list[str]] = {}
     all_tool_names: set[str] = set()
     for a in scenario.get("agents", []):
