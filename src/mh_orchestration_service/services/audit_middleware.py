@@ -79,7 +79,15 @@ class AuditMiddleware(Middleware):
 
         tool_count = len(tools) if tools else 0
         message_count = len(messages)
-        total_chars = sum(len(json.dumps(m, ensure_ascii=False)) for m in messages)
+        total_chars = 0
+        for m in messages:
+            content = m.get("content", "")
+            if isinstance(content, str):
+                total_chars += len(content)
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        total_chars += len(part.get("text", "") or "")
 
         entry = self._base()
         entry["event"] = "llm_start"

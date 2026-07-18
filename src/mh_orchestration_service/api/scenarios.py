@@ -36,24 +36,31 @@ async def _enrich_agents_for_scenario(
     adapters = request.app.state.adapters
     scenario_agents = {a["name"] for a in scenario.get("agents", [])}
     scenario_tools: dict[str, list[str]] = {}
+    all_tool_names: set[str] = set()
     for a in scenario.get("agents", []):
-        scenario_tools[a["name"]] = a.get("tool_names", [])
+        tools = a.get("tool_names", [])
+        scenario_tools[a["name"]] = tools
+        all_tool_names.update(tools)
 
     # Only fetch agents in this scenario
-    agents = [
-        a
-        for a in [
-            await adapters.management_provider.get_agent(name)
-            for name in scenario_agents
+    batch_get_agents = getattr(adapters.management_provider, "get_agents", None)
+    if batch_get_agents:
+        agents_map = await batch_get_agents(list(scenario_agents))
+        agents = [v for v in agents_map.values() if v is not None]
+    else:
+        agents = [
+            a
+            for a in [
+                await adapters.management_provider.get_agent(name)
+                for name in scenario_agents
+            ]
+            if a is not None
         ]
-        if a is not None
-    ]
 
     # Only fetch tools referenced by scenario agents
-    all_tool_names = list({t for tools in scenario_tools.values() for t in tools})
     batch_get_tools = getattr(adapters.management_provider, "get_tools", None)
     if batch_get_tools:
-        tool_map = await batch_get_tools(all_tool_names)
+        tool_map = await batch_get_tools(list(all_tool_names))
     else:
         tool_map = {}
         for tname in all_tool_names:

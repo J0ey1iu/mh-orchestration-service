@@ -132,15 +132,28 @@ async def run_agent(
         await memory.add_message(msg)
 
     tools = []
+    tool_schemas: dict[str, dict] = {}
     for schema in body.get("tools", []):
         func = schema.get("function", schema)
         tool_name = func.get("name", "")
-        if not tool_name:
-            continue
-        tool_meta = await adapters.management_provider.get_tool(tool_name)
+        if tool_name:
+            tool_schemas[tool_name] = func
+
+    batch_get_tools = getattr(adapters.management_provider, "get_tools", None)
+    if batch_get_tools:
+        tools_map = await batch_get_tools(list(tool_schemas))
+    else:
+        tools_map = {}
+        for n in tool_schemas:
+            meta = await adapters.management_provider.get_tool(n)
+            if meta is not None:
+                tools_map[n] = meta
+
+    outbound_auth_provider = getattr(adapters, "outbound_auth_provider", None)
+    for tool_name, tool_meta in tools_map.items():
         if tool_meta is None:
             continue
-        outbound_auth_provider = getattr(adapters, "outbound_auth_provider", None)
+        func = tool_schemas[tool_name]
         tm = ToolMetadata(
             name=tool_name,
             display_name=tool_meta.get("display_name", tool_name),

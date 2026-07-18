@@ -133,9 +133,7 @@ class ConfigManager:
             env_key = _env_key(prefix, field_name)
             value = os.environ.get(env_key)
             if value is not None:
-                kwargs[field_name] = _coerce_env_value(
-                    value, schema_cls.model_fields[field_name].annotation
-                )
+                kwargs[field_name] = _coerce_env_value(value, field_info.annotation)
                 continue
 
             # ── 2. 远程配置中心 ───────────────────────

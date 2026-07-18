@@ -81,12 +81,13 @@ class _LabeledHistogram:
                     continue
                 sorted_vals = sorted(values)
                 n = len(sorted_vals)
+                total = sum(sorted_vals)
                 result.append(
                     {
                         "labels": json.loads(k),
                         "count": n,
-                        "sum": sum(sorted_vals),
-                        "avg": sum(sorted_vals) / n,
+                        "sum": total,
+                        "avg": total / n,
                         "p50": sorted_vals[int(n * 0.5)] if n > 0 else 0,
                         "p90": sorted_vals[min(int(n * 0.9), n - 1)] if n > 0 else 0,
                         "p99": sorted_vals[min(int(n * 0.99), n - 1)] if n > 0 else 0,

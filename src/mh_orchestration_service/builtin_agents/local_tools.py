@@ -101,12 +101,8 @@ async def bash_fn(
                         "type": "stream",
                         "stream": label,
                         "content": content,
-                        "partial_stdout": partial
-                        if label == "stdout"
-                        else "".join(stdout_bufs),
-                        "partial_stderr": partial
-                        if label == "stderr"
-                        else "".join(stderr_bufs),
+                        "partial_stdout": partial if label == "stdout" else None,
+                        "partial_stderr": partial if label == "stderr" else None,
                     }
         finally:
             t_stdout.cancel()

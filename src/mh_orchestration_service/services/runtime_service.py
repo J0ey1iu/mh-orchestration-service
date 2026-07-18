@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+from collections import defaultdict
 from collections.abc import Awaitable, Sequence
 from typing import Any, Callable
 from urllib.parse import quote
@@ -49,6 +51,7 @@ from mh_orchestration_service.services.compaction import make_llm_summarizer
 from mh_orchestration_service.services.database import get_session_store
 from mh_orchestration_service.services.perm_middleware import PermissionMiddleware
 
+logger = logging.getLogger("orchestration.runtime")
 
 # ── Event serialization (single source of truth) ──────────────────────────────
 
@@ -363,7 +366,7 @@ async def create_runtime(
         user_perms = await adapters.permission_checker.get_permissions(user_id)
 
     # ── Resolve scenario data (single lookup, not full scan) ──
-    scenario_tool_names: dict[str, list[str]] = {}
+    scenario_tool_names: dict[str, set[str]] = defaultdict(set)
     scenario_agent_names: set[str] | None = None
 
     if scenario_id:
@@ -375,29 +378,21 @@ async def create_runtime(
                 "use:agent",
             )
             for a in scenario_data.get("agents", []):
-                scenario_tool_names[a["name"]] = a.get("tool_names", [])
+                scenario_tool_names[a["name"]].update(a.get("tool_names", []))
         else:
             scenario_agent_names = set()
     else:
         # No scenario filter: build agent→tool_names from all scenarios
         for s in await adapters.management_provider.list_scenarios():
             for a in s.get("agents", []):
-                name = a["name"]
-                tools = a.get("tool_names", [])
-                if name not in scenario_tool_names:
-                    scenario_tool_names[name] = list(tools)
-                else:
-                    existing = set(scenario_tool_names[name])
-                    for t in tools:
-                        if t not in existing:
-                            scenario_tool_names[name].append(t)
-                            existing.add(t)
+                scenario_tool_names[a["name"]].update(a.get("tool_names", []))
 
     # Resolve provider credentials for agents that reference a configured provider.
     # Built before the resolver (which is synchronous) so we can look up creds by agent name.
     _resolved_creds: dict[str, dict[str, str]] = {}
 
     # Register agents — filtered by scenario + permissions
+    _provider_cache: dict[str, dict[str, str] | None] = {}
     for a in await adapters.management_provider.list_agents():
         name = a["name"]
         if scenario_agent_names is not None:
@@ -412,7 +407,11 @@ async def create_runtime(
         provider_ref = a.get("provider_name", "") or a.get("provider", "")
         provider_type = a.get("provider", "openai")
         if provider_ref and provider_store is not None:
-            entity = await provider_store.get_provider(provider_ref)
+            if provider_ref not in _provider_cache:
+                _provider_cache[provider_ref] = await provider_store.get_provider(
+                    provider_ref
+                )
+            entity = _provider_cache[provider_ref]
             if entity is not None:
                 provider_type = entity.get("provider_type", provider_type)
                 _resolved_creds[name] = {
@@ -430,7 +429,7 @@ async def create_runtime(
                 system_prompt_locale=parse_locale_json(a.get("system_prompt_locale")),
                 metadata_id=a["name"],
                 agent_type=a.get("agent_type", "simple"),
-                tool_names=scenario_tool_names.get(a["name"], []),
+                tool_names=list(scenario_tool_names.get(a["name"], [])),
                 provider=provider_type,
                 model=a.get("model", ""),
                 llm_config=a.get("llm_config", {}),
@@ -439,16 +438,24 @@ async def create_runtime(
         )
 
     all_tool_names = set(tool_names)
-    all_tool_names.update(scenario_tool_names.get(agent_name, []))
+    all_tool_names.update(scenario_tool_names.get(agent_name, set()))
 
     # Batch-fetch tool metadata (one call instead of N)
     batch_get_tools = getattr(adapters.management_provider, "get_tools", None)
     if batch_get_tools:
         tools_map = await batch_get_tools(list(all_tool_names))
     else:
-        tools_map = {
-            n: await adapters.management_provider.get_tool(n) for n in all_tool_names
-        }
+        _tool_names = list(all_tool_names)
+        _results = await asyncio.gather(
+            *(adapters.management_provider.get_tool(n) for n in _tool_names),
+            return_exceptions=True,
+        )
+        tools_map = {}
+        for n, r in zip(_tool_names, _results):
+            if isinstance(r, Exception):
+                logger.warning("Failed to fetch tool '%s': %s", n, r)
+            elif isinstance(r, dict):
+                tools_map[n] = r
 
     tool_registry = ToolRegistry()
     for tname, tool_meta in tools_map.items():

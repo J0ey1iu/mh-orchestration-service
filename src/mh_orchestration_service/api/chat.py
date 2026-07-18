@@ -93,15 +93,16 @@ async def chat(
         tool_names: list[str] = []
 
         if scenario:
+            found = False
             for a in scenario.get("agents", []):
                 if a["name"] == agent_name:
                     tool_names = a.get("tool_names", [])
+                    found = True
                     break
-            if not tool_names:
-                for a in scenario.get("agents", []):
-                    tool_names = a.get("tool_names", [])
-                    agent_name = a["name"]
-                    break
+            if not found:
+                first = scenario["agents"][0]
+                tool_names = first.get("tool_names", [])
+                agent_name = first["name"]
         tool_names = [
             t for t in tool_names if match_permission(user_perms, f"use:tool:{t}")
         ]
