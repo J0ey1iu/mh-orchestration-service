@@ -133,6 +133,10 @@ class MyRegistry(RegistryProvider):
     async def get_tool(self, name: str) -> dict | None: ...
     async def list_scenarios(self) -> list[dict]: ...
     async def get_scenario(self, s_id: str) -> dict | None: ...
+
+    # ── 可选性能优化 ────────────────────
+    # get_tools(names: list[str]) -> dict[str, dict | None]
+    # 批量获取工具元数据（运行时会自动检测并使用，无需额外配置）
 ```
 
 返回数据结构:

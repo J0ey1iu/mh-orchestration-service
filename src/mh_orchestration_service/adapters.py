@@ -82,6 +82,23 @@ def match_permission(user_permissions: list[str], target: str) -> bool:
     return False
 
 
+def has_broad_permission(user_permissions: list[str], prefix: str) -> bool:
+    """Check if *user_permissions* grants access to all resources under *prefix*.
+
+    ``has_broad_permission(perms, "use:tool")`` returns True if any permission
+    matches ``use:tool:*``, ``*:*:*``, ``*:tool:*``, or ``use:*:*``.
+
+    This is a fast-path helper for list endpoints — when it returns True,
+    per-item permission checks can be skipped entirely.
+    """
+    for p in user_permissions:
+        if p in ("*", "*:*:*", "*:*"):
+            return True
+        if p == f"{prefix}:*":
+            return True
+    return False
+
+
 # ── M2M Auth ──────────────────────────────────────────────────────────────────
 
 
@@ -142,6 +159,11 @@ class RegistryProvider(Protocol):
 
     Customer deployment: implement this protocol to query your own
     registry system instead of the built-in registry-service.
+
+    Optional performance optimization — implement ``get_tools(names)``
+    returning ``dict[str, dict[str, Any] | None]`` to replace N+1
+    ``get_tool`` calls with a single batch operation. The runtime
+    auto-detects and uses this method when available.
     """
 
     async def get_agent(self, name: str) -> dict[str, Any] | None: ...

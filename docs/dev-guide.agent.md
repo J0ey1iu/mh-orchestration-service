@@ -58,6 +58,10 @@ class RegistryProvider(Protocol):
     async def list_tools(self) -> list[dict[str, Any]]: ...
     async def get_scenario(self, scenario_id: str) -> dict[str, Any] | None: ...
     async def list_scenarios(self) -> list[dict]: ...
+
+    # Optional optimization:
+    # async def get_tools(self, names: list[str]) -> dict[str, dict[str, Any] | None]
+    # Returns batch tool metadata. Runtime auto-detects and uses this to avoid N+1 queries.
 ```
 
 **Agent dict shape:**

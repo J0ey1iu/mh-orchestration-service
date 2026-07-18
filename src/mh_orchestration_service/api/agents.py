@@ -22,7 +22,7 @@ from mh_orchestration_service.api.locale import (
     resolve_description,
     resolve_display_name,
 )
-from mh_orchestration_service.adapters import match_permission
+from mh_orchestration_service.adapters import has_broad_permission, match_permission
 from mh_orchestration_service.services.runtime_service import _tool_binding
 
 logger = logging.getLogger("orchestration.agents")
@@ -59,6 +59,27 @@ async def list_agents(
             return []
         return await _enrich_agents_for_scenario(request, s, user_perms, locale)
 
+    if has_broad_permission(user_perms, "use:agent"):
+        return [
+            {
+                "name": a["name"],
+                "display_name": resolve_display_name(
+                    a.get("display_name", a["name"]),
+                    a.get("display_name_locale"),
+                    locale,
+                ),
+                "description": resolve_description(
+                    a.get("description", ""),
+                    a.get("description_locale"),
+                    locale,
+                ),
+                "tool_names": [],
+                "tools": [],
+                "provider": a.get("provider", "openai"),
+                "model": a.get("model", ""),
+            }
+            for a in agents
+        ]
     result = []
     for a in agents:
         if not match_permission(user_perms, f"use:agent:{a['name']}"):

@@ -298,6 +298,17 @@ async def _tool_binding(
     return LocalToolBinding(fn=fn)
 
 
+def _apply_permission_filter(
+    names: set[str],
+    user_perms: list[str] | None,
+    prefix: str,
+) -> set[str]:
+    """Filter *names* by matching each against *user_perms* with the given permission prefix."""
+    if user_perms is None:
+        return names
+    return {n for n in names if match_permission(user_perms, f"{prefix}:{n}")}
+
+
 async def _get_permitted_scenario_agents(
     management_provider: Any,
     permission_checker: Any,
@@ -312,22 +323,15 @@ async def _get_permitted_scenario_agents(
     if not scenario_id:
         return None
 
-    scenario_agent_names: set[str] | None = None
-    for s in await management_provider.list_scenarios():
-        if s.get("id") == scenario_id:
-            scenario_agent_names = {a["name"] for a in s.get("agents", [])}
-            break
-    if scenario_agent_names is None:
+    scenario = await management_provider.get_scenario(scenario_id)
+    if scenario is None:
         return set()
 
+    agent_names = {a["name"] for a in scenario.get("agents", [])}
     if permission_checker is not None:
         user_perms = await permission_checker.get_permissions(user_id)
-        scenario_agent_names = {
-            name
-            for name in scenario_agent_names
-            if match_permission(user_perms, f"use:agent:{name}")
-        }
-    return scenario_agent_names
+        agent_names = _apply_permission_filter(agent_names, user_perms, "use:agent")
+    return agent_names
 
 
 async def create_runtime(
@@ -353,34 +357,41 @@ async def create_runtime(
 
     agent_registry = AgentRegistry()
 
-    # ── Build agent→tool_names map from all scenarios ──
-    scenario_tool_names: dict[str, list[str]] = {}
-    for s in await adapters.management_provider.list_scenarios():
-        for a in s.get("agents", []):
-            name = a["name"]
-            tools = a.get("tool_names", [])
-            if name not in scenario_tool_names:
-                scenario_tool_names[name] = list(tools)
-            else:
-                existing = set(scenario_tool_names[name])
-                for t in tools:
-                    if t not in existing:
-                        scenario_tool_names[name].append(t)
-                        existing.add(t)
-
-    scenario_agent_names = await _get_permitted_scenario_agents(
-        adapters.management_provider,
-        adapters.permission_checker,
-        scenario_id,
-        user_id,
-    )
-
-    # When there is no scenario filter, check permissions per-agent
+    # ── Single permission fetch (one network call instead of N) ──
     user_perms: list[str] | None = None
-    if scenario_agent_names is None:
-        if adapters.permission_checker:
-            user_perms = await adapters.permission_checker.get_permissions(user_id)
-        # user_perms stays None when no permission_checker — all agents pass
+    if adapters.permission_checker:
+        user_perms = await adapters.permission_checker.get_permissions(user_id)
+
+    # ── Resolve scenario data (single lookup, not full scan) ──
+    scenario_tool_names: dict[str, list[str]] = {}
+    scenario_agent_names: set[str] | None = None
+
+    if scenario_id:
+        scenario_data = await adapters.management_provider.get_scenario(scenario_id)
+        if scenario_data is not None:
+            scenario_agent_names = _apply_permission_filter(
+                {a["name"] for a in scenario_data.get("agents", [])},
+                user_perms,
+                "use:agent",
+            )
+            for a in scenario_data.get("agents", []):
+                scenario_tool_names[a["name"]] = a.get("tool_names", [])
+        else:
+            scenario_agent_names = set()
+    else:
+        # No scenario filter: build agent→tool_names from all scenarios
+        for s in await adapters.management_provider.list_scenarios():
+            for a in s.get("agents", []):
+                name = a["name"]
+                tools = a.get("tool_names", [])
+                if name not in scenario_tool_names:
+                    scenario_tool_names[name] = list(tools)
+                else:
+                    existing = set(scenario_tool_names[name])
+                    for t in tools:
+                        if t not in existing:
+                            scenario_tool_names[name].append(t)
+                            existing.add(t)
 
     # Resolve provider credentials for agents that reference a configured provider.
     # Built before the resolver (which is synchronous) so we can look up creds by agent name.
@@ -389,9 +400,10 @@ async def create_runtime(
     # Register agents — filtered by scenario + permissions
     for a in await adapters.management_provider.list_agents():
         name = a["name"]
-        if scenario_agent_names is not None and name not in scenario_agent_names:
-            continue
-        if user_perms is not None and not match_permission(
+        if scenario_agent_names is not None:
+            if name not in scenario_agent_names:
+                continue
+        elif user_perms is not None and not match_permission(
             user_perms, f"use:agent:{name}"
         ):
             continue
@@ -429,9 +441,17 @@ async def create_runtime(
     all_tool_names = set(tool_names)
     all_tool_names.update(scenario_tool_names.get(agent_name, []))
 
+    # Batch-fetch tool metadata (one call instead of N)
+    batch_get_tools = getattr(adapters.management_provider, "get_tools", None)
+    if batch_get_tools:
+        tools_map = await batch_get_tools(list(all_tool_names))
+    else:
+        tools_map = {
+            n: await adapters.management_provider.get_tool(n) for n in all_tool_names
+        }
+
     tool_registry = ToolRegistry()
-    for tname in all_tool_names:
-        tool_meta = await adapters.management_provider.get_tool(tname)
+    for tname, tool_meta in tools_map.items():
         if tool_meta is None:
             continue
         params = tool_meta.get("parameters", {"type": "object", "properties": {}})

@@ -12,7 +12,7 @@ from mh_orchestration_service.api.locale import (
     resolve_display_name,
     resolve_locale,
 )
-from mh_orchestration_service.adapters import match_permission
+from mh_orchestration_service.adapters import has_broad_permission, match_permission
 
 router = APIRouter(prefix="/api/v1/scenarios", tags=["scenarios"])
 
@@ -38,26 +38,44 @@ async def _enrich_agents_for_scenario(
     scenario_tools: dict[str, list[str]] = {}
     for a in scenario.get("agents", []):
         scenario_tools[a["name"]] = a.get("tool_names", [])
-    tools_all = await adapters.management_provider.list_tools()
-    tool_map = {t["name"]: t for t in tools_all}
-    agents = await adapters.management_provider.list_agents()
+
+    # Only fetch agents in this scenario
+    agents = [
+        a
+        for a in [
+            await adapters.management_provider.get_agent(name)
+            for name in scenario_agents
+        ]
+        if a is not None
+    ]
+
+    # Only fetch tools referenced by scenario agents
+    all_tool_names = list({t for tools in scenario_tools.values() for t in tools})
+    batch_get_tools = getattr(adapters.management_provider, "get_tools", None)
+    if batch_get_tools:
+        tool_map = await batch_get_tools(all_tool_names)
+    else:
+        tool_map = {}
+        for tname in all_tool_names:
+            meta = await adapters.management_provider.get_tool(tname)
+            if meta is not None:
+                tool_map[tname] = meta
 
     result = []
     for agent in agents:
-        if agent["name"] not in scenario_agents:
-            continue
-        if not match_permission(user_perms, f"use:agent:{agent['name']}"):
+        name = agent["name"]
+        if not match_permission(user_perms, f"use:agent:{name}"):
             continue
         tools = [
             t
-            for t in scenario_tools.get(agent["name"], [])
+            for t in scenario_tools.get(name, [])
             if match_permission(user_perms, f"use:tool:{t}")
         ]
         result.append(
             {
-                "name": agent["name"],
+                "name": name,
                 "display_name": resolve_display_name(
-                    agent.get("display_name", agent["name"]),
+                    agent.get("display_name", name),
                     agent.get("display_name_locale"),
                     locale,
                 ),
@@ -98,14 +116,19 @@ async def list_scenarios(
 
     result = []
     for s in await _load_scenarios(request):
-        if not match_permission(user_perms, f"use:scene:{s['id']}"):
+        if not has_broad_permission(user_perms, "use:scene") and not match_permission(
+            user_perms, f"use:scene:{s['id']}"
+        ):
             continue
         agent_names = [a["name"] for a in s.get("agents", [])]
-        visible_agents = [
-            name
-            for name in agent_names
-            if match_permission(user_perms, f"use:agent:{name}")
-        ]
+        if has_broad_permission(user_perms, "use:agent"):
+            visible_agents = agent_names
+        else:
+            visible_agents = [
+                name
+                for name in agent_names
+                if match_permission(user_perms, f"use:agent:{name}")
+            ]
         if not visible_agents:
             continue
         result.append(

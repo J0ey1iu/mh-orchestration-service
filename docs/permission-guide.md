@@ -18,7 +18,9 @@ action:resource:target
 | `resource` | 资源大类 | `scene` / `agent` / `tool` / `eval` |
 | `target` | 资源标识或通配符 | `*` / `code-reviewer` / `triage` |
 
-任意一段可用 `*` 匹配全部。匹配逻辑见 `mh_orchestration_service/auth/protocols.py` `match_permission()`。
+任意一段可用 `*` 匹配全部。匹配逻辑见 `mh_orchestration_service/adapters.py` `match_permission()`。
+
+`has_broad_permission(user_permissions, prefix)` 是快捷检查函数，判断用户是否拥有某类资源的通配权限（如 `use:tool:*`），用于列表接口提前跳过逐条过滤。
 
 ---
 
@@ -89,12 +91,16 @@ visible = [s for s in all_scenarios
 
 文件: `services/perm_middleware.py:15`
 
-在 agent 每次调用 tool 时拦截:
+在 agent 每次调用 tool 时拦截（首调用时惰性加载用户完整权限列表，后续使用本地 `match_permission` 避免重复远程调用）:
 ```python
 class PermissionMiddleware(Middleware):
     async def should_allow_tool(self, tool_call, ...):
         tool_name = tool_call["function"]["name"]
         required = f"use:tool:{tool_name}"
+        if self._user_perms is None:
+            self._user_perms = await self._permission_checker.get_permissions(self._user_id)
+        if match_permission(self._user_perms, required):
+            return True
         allowed = await self._permission_checker.check(self._user_id, required)
         if not allowed:
             return "Permission denied: missing use:tool:{tool_name}"

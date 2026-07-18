@@ -30,7 +30,7 @@ from mh_orchestration_service.api.locale import (
 from mh_orchestration_service.adapters import match_permission
 from mh_orchestration_service.services.database import get_session_store
 from mh_orchestration_service.services.runtime_service import (
-    _get_permitted_scenario_agents,
+    _apply_permission_filter,
     acquire_session_lock,
     create_runtime,
     release_session_lock,
@@ -61,19 +61,24 @@ async def discover_agents_execute(
     async def event_stream():
         try:
             adapters = request.app.state.adapters
-            scenario_agent_names = await _get_permitted_scenario_agents(
-                adapters.management_provider,
-                adapters.permission_checker,
-                scenario_id,
-                user_id,
-            )
 
             user_perms: list[str] | None = None
-            if scenario_agent_names is None:
-                if adapters.permission_checker:
-                    user_perms = await adapters.permission_checker.get_permissions(
-                        user_id
+            if adapters.permission_checker:
+                user_perms = await adapters.permission_checker.get_permissions(user_id)
+
+            scenario_agent_names: set[str] | None = None
+            if scenario_id:
+                scenario_data = await adapters.management_provider.get_scenario(
+                    scenario_id
+                )
+                if scenario_data is not None:
+                    scenario_agent_names = _apply_permission_filter(
+                        {a["name"] for a in scenario_data.get("agents", [])},
+                        user_perms,
+                        "use:agent",
                     )
+                else:
+                    scenario_agent_names = set()
 
             agents = await adapters.management_provider.list_agents()
             result = []
@@ -88,8 +93,10 @@ async def discover_agents_execute(
                     and name not in scenario_agent_names
                 ):
                     continue
-                if user_perms is not None and not match_permission(
-                    user_perms, f"use:agent:{name}"
+                if (
+                    scenario_agent_names is None
+                    and user_perms is not None
+                    and not match_permission(user_perms, f"use:agent:{name}")
                 ):
                     continue
                 result.append(

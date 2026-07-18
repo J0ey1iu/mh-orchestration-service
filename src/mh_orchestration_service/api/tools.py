@@ -11,7 +11,7 @@ from mh_orchestration_service.api.locale import (
     resolve_description,
     resolve_display_name,
 )
-from mh_orchestration_service.adapters import match_permission
+from mh_orchestration_service.adapters import has_broad_permission, match_permission
 
 router = APIRouter(prefix="/api/v1/tools", tags=["tools"])
 
@@ -26,6 +26,23 @@ async def list_tools(
     adapters = request.app.state.adapters
     locale = parse_locale(accept_language)
     tools = await adapters.management_provider.list_tools()
+    if has_broad_permission(user_perms, "use:tool"):
+        return [
+            {
+                "name": t["name"],
+                "display_name": resolve_display_name(
+                    t.get("display_name", t["name"]),
+                    t.get("display_name_locale"),
+                    locale,
+                ),
+                "description": resolve_description(
+                    t.get("description", ""),
+                    t.get("description_locale"),
+                    locale,
+                ),
+            }
+            for t in tools
+        ]
     result = []
     for t in tools:
         if not match_permission(user_perms, f"use:tool:{t['name']}"):
