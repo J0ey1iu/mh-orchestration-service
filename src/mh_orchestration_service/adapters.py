@@ -73,7 +73,7 @@ class MetadataManager(RegistryProvider, Protocol):
 
 
 @runtime_checkable
-class ProviderStore(Protocol):
+class LLMProviderStore(Protocol):
     """CRUD for user-configured LLM provider credentials.
 
     Customer deployment: implement this protocol to store provider

@@ -346,7 +346,7 @@ async def create_runtime(
     llm_provider_registry = getattr(adapters, "llm_provider_registry", None)
     llm_extra_headers = getattr(adapters, "llm_extra_headers_provider", None)
     outbound_auth_provider = getattr(adapters, "outbound_auth_provider", None)
-    provider_store = getattr(adapters, "provider_store", None)
+    provider_store = getattr(adapters, "llm_provider_store", None)
     verify_agent_tool_ssl = getattr(adapters.settings, "verify_agent_tool_ssl", False)
 
     agent_registry = AgentRegistry()
@@ -394,7 +394,7 @@ async def create_runtime(
         ):
             continue
         # Resolve provider reference: check provider_name first, then provider field.
-        # Both can reference a configured ProviderStore entity.
+        # Both can reference a configured LLMProviderStore entity.
         provider_ref = a.get("provider_name", "") or a.get("provider", "")
         provider_type = a.get("provider", "openai")
         if provider_ref and provider_store is not None:

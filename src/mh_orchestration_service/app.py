@@ -59,7 +59,7 @@ class AppState:
         m2m_auth_provider: Any | None = None,
         llm_extra_headers_provider: Any | None = None,
         llm_provider_registry: Any | None = None,
-        provider_store: Any | None = None,
+        llm_provider_store: Any | None = None,
     ) -> None:
         object.__setattr__(self, "_initialized", False)
         self.settings = settings
@@ -67,7 +67,7 @@ class AppState:
         self.permission_checker = permission_checker
         self.registry_provider = registry_provider
         self.management_provider = management_provider
-        self.provider_store = provider_store
+        self.llm_provider_store = llm_provider_store
         self.llm_provider_factory = llm_provider_factory
         self.outbound_auth_provider = outbound_auth_provider
         self.m2m_auth_provider = m2m_auth_provider
@@ -96,7 +96,7 @@ _KNOWN_ADAPTER_SLOTS: frozenset[str] = frozenset(
         "permission_checker",
         "registry_provider",
         "management_provider",
-        "provider_store",
+        "llm_provider_store",
         "llm_provider_factory",
         "outbound_auth_provider",
         "m2m_auth_provider",
@@ -225,7 +225,7 @@ def create_app(
     m2m_auth_provider: LifespanHook | None = None,
     llm_extra_headers_provider: ExtraHeadersProvider | None = None,
     llm_provider_registry: LifespanHook | None = None,
-    provider_store: LifespanHook | None = None,
+    llm_provider_store: LifespanHook | None = None,
     eval_result_storage: LifespanHook | None = None,
     lifespan_hooks: list[LifespanHook] | None = None,
     dev_routers: list[APIRouter] | None = None,
@@ -306,8 +306,8 @@ def create_app(
                 await stack.enter_async_context(outbound_auth_provider(app))
             if m2m_auth_provider is not None:
                 await stack.enter_async_context(m2m_auth_provider(app))
-            if provider_store is not None:
-                await stack.enter_async_context(provider_store(app))
+            if llm_provider_store is not None:
+                await stack.enter_async_context(llm_provider_store(app))
 
             if eval_result_storage is not None:
                 await stack.enter_async_context(eval_result_storage(app))

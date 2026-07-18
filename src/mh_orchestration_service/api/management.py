@@ -504,7 +504,7 @@ async def list_provider_configs(
     user_id: str = Depends(require_permission("manage:agent:*")),
 ) -> ListResponse:
     adapters = request.app.state.adapters
-    store = getattr(adapters, "provider_store", None)
+    store = getattr(adapters, "llm_provider_store", None)
     if store is None:
         return ListResponse(items=[], total=0, page=page, page_size=page_size)
     items = await store.list_providers()
@@ -526,7 +526,7 @@ async def get_provider_config(
     user_id: str = Depends(require_permission("manage:agent:*")),
 ) -> dict[str, Any]:
     adapters = request.app.state.adapters
-    store = getattr(adapters, "provider_store", None)
+    store = getattr(adapters, "llm_provider_store", None)
     if store is None:
         raise HTTPException(501, "Provider store not configured")
     p = await store.get_provider(name)
@@ -542,7 +542,7 @@ async def create_provider_config(
     user_id: str = Depends(require_permission("manage:agent:*")),
 ) -> dict[str, Any]:
     adapters = request.app.state.adapters
-    store = getattr(adapters, "provider_store", None)
+    store = getattr(adapters, "llm_provider_store", None)
     if store is None:
         raise HTTPException(501, "Provider store not configured")
     try:
@@ -569,7 +569,7 @@ async def update_provider_config(
     user_id: str = Depends(require_permission("manage:agent:*")),
 ) -> dict[str, Any]:
     adapters = request.app.state.adapters
-    store = getattr(adapters, "provider_store", None)
+    store = getattr(adapters, "llm_provider_store", None)
     if store is None:
         raise HTTPException(501, "Provider store not configured")
     payload = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -595,7 +595,7 @@ async def delete_provider_config(
     user_id: str = Depends(require_permission("manage:agent:*")),
 ) -> dict[str, str]:
     adapters = request.app.state.adapters
-    store = getattr(adapters, "provider_store", None)
+    store = getattr(adapters, "llm_provider_store", None)
     if store is None:
         raise HTTPException(501, "Provider store not configured")
     try:
