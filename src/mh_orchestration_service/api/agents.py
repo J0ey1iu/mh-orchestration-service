@@ -22,7 +22,7 @@ from mh_orchestration_service.api.locale import (
     resolve_description,
     resolve_display_name,
 )
-from mh_orchestration_service.auth import match_permission
+from mh_orchestration_service.adapters import match_permission
 from mh_orchestration_service.services.runtime_service import _tool_binding
 
 logger = logging.getLogger("orchestration.agents")

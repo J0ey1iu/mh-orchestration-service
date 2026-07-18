@@ -14,9 +14,8 @@ from mh_orchestration_service.api.dependencies import (
     resolve_request_permissions,
 )
 from mh_orchestration_service.api.locale import parse_locale
-from mh_orchestration_service.auth import match_permission
+from mh_orchestration_service.adapters import SessionStoreProtocol, match_permission
 from mh_orchestration_service.context import get_current_trace_id
-from mh_orchestration_service.database._memory_store import SessionStoreProtocol
 from mh_orchestration_service.services.database import get_session_store
 from mh_orchestration_service.services.runtime_service import (
     acquire_session_lock,

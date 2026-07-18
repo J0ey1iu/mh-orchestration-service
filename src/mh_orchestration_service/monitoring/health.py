@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
-from mh_orchestration_service.services.database import get_db
+from mh_orchestration_service.services.database import get_db_from_request
 
 logger = logging.getLogger("orchestration.health")
 
@@ -17,9 +17,9 @@ async def health():
 
 
 @health_router.get("/ready")
-async def ready():
+async def ready(request: Request):
     try:
-        db = get_db()
+        db = get_db_from_request(request)
         await db.execute("SELECT 1")
     except Exception as e:
         logger.warning("Readiness check failed: %s", e)

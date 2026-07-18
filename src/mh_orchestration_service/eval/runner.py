@@ -10,7 +10,7 @@ from fastapi import Request
 from minimal_harness.agent.middleware import Middleware
 from minimal_harness.types import AgentEnd, AgentMetadata, LLMEnd, ToolCall
 
-from mh_orchestration_service.eval.storage import EvalResultStorage
+from mh_orchestration_service.adapters import EvalResultStorage
 from mh_orchestration_service.eval.types import (
     BatchEvalRequest,
     BatchSummary,

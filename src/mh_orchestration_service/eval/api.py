@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from mh_orchestration_service.api.dependencies import verify_m2m_request
 from mh_orchestration_service.eval.runner import run_batch_eval
-from mh_orchestration_service.eval.storage import EvalResultStorage
+from mh_orchestration_service.adapters import EvalResultStorage
 from mh_orchestration_service.eval.types import (
     BatchEvalRequest,
     EvalQuestion,

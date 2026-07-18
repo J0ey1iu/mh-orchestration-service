@@ -11,7 +11,7 @@ from mh_orchestration_service.api.locale import (
     resolve_description,
     resolve_display_name,
 )
-from mh_orchestration_service.auth import match_permission
+from mh_orchestration_service.adapters import match_permission
 
 router = APIRouter(prefix="/api/v1/tools", tags=["tools"])
 

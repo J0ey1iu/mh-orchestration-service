@@ -38,13 +38,15 @@ from minimal_harness.types import (
 )
 
 from mh_orchestration_service.api.locale import parse_locale_json
-from mh_orchestration_service.auth import match_permission
-from mh_orchestration_service.database._memory_store import SessionStoreProtocol
+from mh_orchestration_service.adapters import (
+    M2MAuthProvider,
+    OutboundAuthProvider,
+    SessionStoreProtocol,
+    match_permission,
+)
 from mh_orchestration_service.services.audit_middleware import AuditMiddleware
 from mh_orchestration_service.services.compaction import make_llm_summarizer
 from mh_orchestration_service.services.database import get_session_store
-from mh_orchestration_service.services.m2m_auth import M2MAuthProvider
-from mh_orchestration_service.services.outbound_auth import OutboundAuthProvider
 from mh_orchestration_service.services.perm_middleware import PermissionMiddleware
 
 

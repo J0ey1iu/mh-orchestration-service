@@ -1,4 +1,4 @@
-from mh_orchestration_service.database._protocol import DatabaseProtocol
+from mh_orchestration_service.adapters import DatabaseProtocol
 
 __all__ = [
     "DatabaseProtocol",

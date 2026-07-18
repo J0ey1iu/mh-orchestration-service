@@ -13,7 +13,7 @@ async def _discover_agents_fn(
         resolve_description,
         resolve_display_name,
     )
-    from mh_orchestration_service.auth import match_permission
+    from mh_orchestration_service.adapters import match_permission
 
     request = get_current_request()
     if request is None:

@@ -5,7 +5,7 @@ from typing import Any
 from minimal_harness.agent.middleware import Middleware
 from minimal_harness.types import ToolCall
 
-from mh_orchestration_service.auth import PermissionChecker
+from mh_orchestration_service.adapters import PermissionChecker
 
 
 class PermissionMiddleware(Middleware):

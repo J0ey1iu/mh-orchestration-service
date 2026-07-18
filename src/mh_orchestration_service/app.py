@@ -60,6 +60,8 @@ class AppState:
         llm_extra_headers_provider: Any | None = None,
         llm_provider_registry: Any | None = None,
         llm_provider_store: Any | None = None,
+        database_provider: Any | None = None,
+        session_store_provider: Any | None = None,
     ) -> None:
         object.__setattr__(self, "_initialized", False)
         self.settings = settings
@@ -74,6 +76,8 @@ class AppState:
         self.llm_extra_headers_provider = llm_extra_headers_provider
         self.llm_provider_registry = llm_provider_registry
         self.eval_result_storage = None
+        self.database_provider = database_provider
+        self.session_store_provider = session_store_provider
         object.__setattr__(self, "_initialized", True)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -103,6 +107,8 @@ _KNOWN_ADAPTER_SLOTS: frozenset[str] = frozenset(
         "llm_extra_headers_provider",
         "llm_provider_registry",
         "eval_result_storage",
+        "database_provider",
+        "session_store_provider",
         "_initialized",
     }
 )
@@ -227,6 +233,8 @@ def create_app(
     llm_provider_registry: LifespanHook | None = None,
     llm_provider_store: LifespanHook | None = None,
     eval_result_storage: LifespanHook | None = None,
+    database_provider: LifespanHook | None = None,
+    session_store_provider: LifespanHook | None = None,
     lifespan_hooks: list[LifespanHook] | None = None,
     dev_routers: list[APIRouter] | None = None,
 ) -> FastAPI:
@@ -258,6 +266,8 @@ def create_app(
             headers 字典（如 ``x-reasoning-format``）。
         llm_provider_registry: LLM provider 注册表 hook。
             用于自定义 provider 注册（per-agent provider 选择）。
+        database_provider: 数据库适配器 hook。
+        session_store_provider: Session 存储适配器 hook。
         lifespan_hooks: 通用生命周期钩子，在 per-adapter hooks 之后执行。
     """
     if logger is not None:
@@ -311,6 +321,12 @@ def create_app(
 
             if eval_result_storage is not None:
                 await stack.enter_async_context(eval_result_storage(app))
+
+            if database_provider is not None:
+                await stack.enter_async_context(database_provider(app))
+
+            if session_store_provider is not None:
+                await stack.enter_async_context(session_store_provider(app))
 
             for hook in lifespan_hooks or []:
                 await stack.enter_async_context(hook(app))

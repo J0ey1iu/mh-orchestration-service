@@ -28,7 +28,8 @@ async def bash_fn(
         return
 
     _cmd = (
-        "$OutputEncoding=[System.Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); " + command
+        "$OutputEncoding=[System.Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); "
+        + command
         if _IS_WINDOWS
         else command
     )
@@ -100,8 +101,12 @@ async def bash_fn(
                         "type": "stream",
                         "stream": label,
                         "content": content,
-                        "partial_stdout": partial if label == "stdout" else "".join(stdout_bufs),
-                        "partial_stderr": partial if label == "stderr" else "".join(stderr_bufs),
+                        "partial_stdout": partial
+                        if label == "stdout"
+                        else "".join(stdout_bufs),
+                        "partial_stderr": partial
+                        if label == "stderr"
+                        else "".join(stderr_bufs),
                     }
         finally:
             t_stdout.cancel()
@@ -178,9 +183,16 @@ async def local_file_operator_fn(
         return
 
     valid_operations = [
-        "read", "write", "append", "edit",
-        "delete", "list_dir", "mkdir", "move",
-        "copy", "exists",
+        "read",
+        "write",
+        "append",
+        "edit",
+        "delete",
+        "list_dir",
+        "mkdir",
+        "move",
+        "copy",
+        "exists",
     ]
     if operation not in valid_operations:
         yield {
@@ -210,7 +222,10 @@ async def local_file_operator_fn(
             parent = os.path.dirname(path)
             if parent and not os.path.isdir(parent):
                 os.makedirs(parent, exist_ok=True)
-                yield {"status": "progress", "message": f"Created parent directory: {parent}"}
+                yield {
+                    "status": "progress",
+                    "message": f"Created parent directory: {parent}",
+                }
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
             yield {
@@ -244,7 +259,10 @@ async def local_file_operator_fn(
                 yield {"status": "error", "message": f"File not found: {path}"}
                 return
             if not old_string:
-                yield {"status": "error", "message": "old_string is required for edit operation"}
+                yield {
+                    "status": "error",
+                    "message": "old_string is required for edit operation",
+                }
                 return
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 data = f.read()
@@ -343,10 +361,16 @@ async def local_file_operator_fn(
         elif operation == "move":
             yield {"status": "progress", "message": f"Moving {source} -> {destination}"}
             if not source:
-                yield {"status": "error", "message": "source is required for move operation"}
+                yield {
+                    "status": "error",
+                    "message": "source is required for move operation",
+                }
                 return
             if not destination:
-                yield {"status": "error", "message": "destination is required for move operation"}
+                yield {
+                    "status": "error",
+                    "message": "destination is required for move operation",
+                }
                 return
             parent = os.path.dirname(destination)
             if parent and not os.path.isdir(parent):
@@ -360,12 +384,21 @@ async def local_file_operator_fn(
             }
 
         elif operation == "copy":
-            yield {"status": "progress", "message": f"Copying {source} -> {destination}"}
+            yield {
+                "status": "progress",
+                "message": f"Copying {source} -> {destination}",
+            }
             if not source:
-                yield {"status": "error", "message": "source is required for copy operation"}
+                yield {
+                    "status": "error",
+                    "message": "source is required for copy operation",
+                }
                 return
             if not destination:
-                yield {"status": "error", "message": "destination is required for copy operation"}
+                yield {
+                    "status": "error",
+                    "message": "destination is required for copy operation",
+                }
                 return
             parent = os.path.dirname(destination)
             if parent and not os.path.isdir(parent):
@@ -430,7 +463,9 @@ BUILTIN_TOOL_METADATA: list[dict[str, Any]] = [
     {
         "name": "bash",
         "display_name": "Bash",
-        "display_name_locale": json.dumps({"zh": "Bash 命令", "en": "Bash"}, ensure_ascii=False),
+        "display_name_locale": json.dumps(
+            {"zh": "Bash 命令", "en": "Bash"}, ensure_ascii=False
+        ),
         "description": (
             f"Execute shell commands on the current system ({_PLATFORM_NAME}, using {_SHELL_NAME}). "
             f"Always use {_CMD_SYNTAX_HINT}. Returns stdout, stderr, and exit code."
@@ -472,7 +507,9 @@ BUILTIN_TOOL_METADATA: list[dict[str, Any]] = [
     {
         "name": "local_file_operator",
         "display_name": "Local File Operator",
-        "display_name_locale": json.dumps({"zh": "本地文件操作", "en": "Local File Operator"}, ensure_ascii=False),
+        "display_name_locale": json.dumps(
+            {"zh": "本地文件操作", "en": "Local File Operator"}, ensure_ascii=False
+        ),
         "description": (
             "Read, write, append, edit (find/replace), delete, list directories, "
             "create directories, move, copy, and check existence of local files and directories."
@@ -493,7 +530,18 @@ BUILTIN_TOOL_METADATA: list[dict[str, Any]] = [
                 "operation": {
                     "type": "string",
                     "description": "File operation to perform. One of: read, write, append, edit, delete, list_dir, mkdir, move, copy, exists.",
-                    "enum": ["read", "write", "append", "edit", "delete", "list_dir", "mkdir", "move", "copy", "exists"],
+                    "enum": [
+                        "read",
+                        "write",
+                        "append",
+                        "edit",
+                        "delete",
+                        "list_dir",
+                        "mkdir",
+                        "move",
+                        "copy",
+                        "exists",
+                    ],
                 },
                 "path": {
                     "type": "string",

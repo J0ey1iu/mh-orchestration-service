@@ -6,7 +6,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
-from mh_orchestration_service.config_protocols import ConfigProvider, SecretResolver
+from mh_orchestration_service.adapters import ConfigProvider, SecretResolver
 
 T = TypeVar("T", bound=BaseModel)
 
