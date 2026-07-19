@@ -218,6 +218,10 @@ async def compact_session(
         if provider_ref and provider_store is not None:
             entity = await provider_store.get_provider(provider_ref)
             if entity is not None:
+                provider_type = entity.get("provider_type", provider_type)
+                if not model:
+                    model = entity.get("default_model", "")
+                    cfg["model"] = model
                 api_key = entity.get("api_key")
                 if api_key:
                     cfg["api_key"] = api_key
