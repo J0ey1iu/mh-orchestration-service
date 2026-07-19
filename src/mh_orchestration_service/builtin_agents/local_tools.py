@@ -89,7 +89,6 @@ async def bash_fn(
                         queue.get(), timeout=timeout_s
                     )
                 except asyncio.TimeoutError:
-                    process.kill()
                     timed_out = True
                     break
 
@@ -105,11 +104,11 @@ async def bash_fn(
                         "partial_stderr": partial if label == "stderr" else None,
                     }
         finally:
+            if process.returncode is None:
+                process.terminate()
             t_stdout.cancel()
             t_stderr.cancel()
             await asyncio.gather(t_stdout, t_stderr, return_exceptions=True)
-
-        if not timed_out:
             await process.wait()
 
         stdout_str = "".join(stdout_bufs)

@@ -3,11 +3,21 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from mh_orchestration_service.api.dependencies import resolve_request_identity
+from mh_orchestration_service.api.dependencies import (
+    resolve_request_identity,
+    resolve_request_permissions,
+)
 from mh_orchestration_service.api.locale import parse_locale, resolve_display_name
+from mh_orchestration_service.services.compaction import _format_messages_for_summary
 from mh_orchestration_service.services.database import get_session_store
+from mh_orchestration_service.services.runtime_service import (
+    acquire_session_lock,
+    format_sse,
+    release_session_lock,
+)
 
 logger = logging.getLogger("orchestration.sessions")
 
@@ -118,6 +128,7 @@ async def get_session(
             session.display_name_locale,
             locale,
         ),
+        "compact_offset": session.memory.get_forward_offset(),
     }
 
 
@@ -133,8 +144,12 @@ async def get_session_messages(
         raise HTTPException(status_code=404, detail="Session not found")
     if session.user_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    messages = store.get_messages_as_items(session)
-    return messages
+    items = store.get_messages_as_items(session)
+    compact_offset = session.memory.get_forward_offset()
+    return {
+        "items": items,
+        "compact_offset": compact_offset,
+    }
 
 
 @router.delete("/{memory_id}", status_code=200)
@@ -151,3 +166,160 @@ async def delete_session(
         raise HTTPException(status_code=403, detail="Access denied")
     await store.delete_session(memory_id)
     return {"ok": True}
+
+
+@router.post("/{memory_id}/compact")
+async def compact_session(
+    request: Request,
+    memory_id: str,
+    user_id: str = Depends(resolve_request_identity),
+    user_perms: list[str] = Depends(resolve_request_permissions),
+) -> StreamingResponse:
+    logger.debug(
+        "INBOUND compact request — memory_id=%s user=%s",
+        memory_id,
+        user_id,
+    )
+    lock = await acquire_session_lock(memory_id)
+    try:
+        store = await get_session_store()
+        session = await store.get_session(memory_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if not session.agent_name:
+            raise HTTPException(status_code=400, detail="Session has no agent assigned")
+
+        adapters = request.app.state.adapters
+        agent_name = session.agent_name
+        agent_meta = await adapters.management_provider.get_agent(agent_name)
+        if agent_meta is None:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        llm_provider_registry = getattr(adapters, "llm_provider_registry", None)
+        if llm_provider_registry is None:
+            raise HTTPException(
+                status_code=500, detail="LLM provider registry not available"
+            )
+
+        provider_ref = agent_meta.get("provider_name", "") or agent_meta.get(
+            "provider", ""
+        )
+        provider_type = agent_meta.get("provider", "openai")
+        model = agent_meta.get("model", "")
+        cfg: dict[str, object] = {"model": model}
+
+        llm_config = agent_meta.get("llm_config")
+        if isinstance(llm_config, dict):
+            cfg.update(llm_config)
+
+        provider_store = getattr(adapters, "llm_provider_store", None)
+        if provider_ref and provider_store is not None:
+            entity = await provider_store.get_provider(provider_ref)
+            if entity is not None:
+                api_key = entity.get("api_key")
+                if api_key:
+                    cfg["api_key"] = api_key
+                base_url = entity.get("base_url")
+                if base_url:
+                    cfg["base_url"] = base_url
+
+        llm_provider = llm_provider_registry.create(provider_type, cfg)
+        all_msgs = session.get_all_messages()
+
+        async def _stream_with_lock():
+            content_accumulated = ""
+            reasoning_accumulated = ""
+            start_time = 0.0
+            error_msg: str | None = None
+            try:
+                try:
+                    yield format_sse(
+                        "CompactionStart",
+                        {
+                            "dropped_message_count": len(all_msgs),
+                            "existing_summary": None,
+                            "keep_recent": 0,
+                            "total_tokens": 0,
+                        },
+                    )
+                    start_time = __import__("time").time()
+                    payload = _format_messages_for_summary(list(all_msgs), None)
+                    response = await llm_provider.chat(messages=payload, tools=[])  # type: ignore[arg-type]
+                    async for delta in response:
+                        if not delta:
+                            continue
+                        if delta.reasoning:
+                            reasoning_accumulated += delta.reasoning
+                            yield format_sse(
+                                "CompactionChunk",
+                                {
+                                    "type": "reasoning",
+                                    "delta": delta.reasoning,
+                                    "accumulated": reasoning_accumulated,
+                                },
+                            )
+                        if delta.content:
+                            content_accumulated += delta.content
+                            yield format_sse(
+                                "CompactionChunk",
+                                {
+                                    "type": "content",
+                                    "delta": delta.content,
+                                    "accumulated": content_accumulated,
+                                },
+                            )
+                except Exception as exc:
+                    logger.exception("Compaction failed")
+                    error_msg = f"{type(exc).__name__}: {exc}"
+
+                compact_offset = len(all_msgs)
+
+                if error_msg is None and content_accumulated:
+                    summary_message: dict = {
+                        "role": "compaction",
+                        "content": content_accumulated,
+                        "meta": {"compact_offset": compact_offset},
+                    }
+                    if reasoning_accumulated:
+                        summary_message["reasoning_content"] = reasoning_accumulated
+                    await session.add_message(summary_message)
+                    session.memory.set_forward_offset(compact_offset)
+                    try:
+                        await store.save_memory(
+                            session.memory,
+                            memory_id,
+                            extra={"title": session.title} if session.title else None,
+                        )
+                    except Exception:
+                        logger.exception("Failed to persist compacted session")
+
+                yield format_sse(
+                    "CompactionEnd",
+                    {
+                        "summary": content_accumulated,
+                        "compact_offset": compact_offset,
+                        "dropped_message_count": len(all_msgs),
+                        "duration": __import__("time").time() - start_time
+                        if start_time
+                        else 0,
+                        "error": error_msg,
+                    },
+                )
+                yield format_sse("done", {})
+            finally:
+                await release_session_lock(memory_id, lock)
+
+        return StreamingResponse(
+            _stream_with_lock(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    except Exception:
+        await release_session_lock(memory_id, lock)
+        raise
